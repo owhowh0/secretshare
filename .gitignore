@@ -1,2 +1,6 @@
 .env
 CLAUDE.md
+__pycache__/
+node_modules/
+.next/
+*.pem
