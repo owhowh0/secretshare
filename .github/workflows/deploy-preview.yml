@@ -65,12 +65,12 @@ jobs:
             echo "=== Syncing PR branch to worktree ==="
             cd "${REPO_DIR}"
             git remote set-url origin "https://github.com/${{ github.repository }}.git"
-            git fetch origin "pull/${PR_NUM}/head"
+            git fetch origin "pull/${PR_NUM}/head:pr-${PR_NUM}" -f
             if [ -d "${WORKTREE_DIR}" ]; then
               cd "${WORKTREE_DIR}"
-              git reset --hard FETCH_HEAD
+              git reset --hard "pr-${PR_NUM}"
             else
-              git worktree add -f -B "pr-${PR_NUM}" "${WORKTREE_DIR}" FETCH_HEAD
+              git worktree add -f "${WORKTREE_DIR}" "pr-${PR_NUM}"
             fi
 
             echo "=== Building & launching isolated stack ==="
