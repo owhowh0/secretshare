@@ -1,0 +1,116 @@
+name: PR Preview Deployment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    name: Deploy Ephemeral Preview
+    if: |
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy Preview Stack via Tailscale SSH
+        env:
+          PR_NUM: ${{ github.event.number }}
+        run: |
+          tailscale ssh root@staging-server << 'EOF'
+            set -euo pipefail
+            PR_NUM="${{ github.event.number }}"
+            REPO_DIR="/opt/secretshare"
+            WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
+
+            echo "=== Ensuring base traefik-net exists ==="
+            docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
+
+            echo "=== Syncing PR branch to worktree ==="
+            cd "${REPO_DIR}"
+            git fetch origin "pull/${PR_NUM}/head:pr-${PR_NUM}"
+            git worktree add -f "${WORKTREE_DIR}" "pr-${PR_NUM}"
+
+            echo "=== Building & launching isolated stack ==="
+            cd "${WORKTREE_DIR}"
+            PR_SECRET=$(openssl rand -hex 16)
+            PR_NUMBER="${PR_NUM}" POSTGRES_PASSWORD="${PR_SECRET}" docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
+          EOF
+
+      - name: Comment Preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const previewUrl = `http://pr-${prNumber}.api.staging-server/docs`;
+            const commentIdentifier = "<!-- preview-deployment-comment -->";
+            const body = `${commentIdentifier}\n### 🚀 Preview Environment Ready\n\n- **API Documentation / Swagger**: [${previewUrl}](${previewUrl})\n- **Health Check**: \`http://pr-${prNumber}.api.staging-server/health\`\n\n> *Accessible securely to team members on Tailscale.*`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existingComment = comments.find(c => c.body.includes(commentIdentifier));
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body,
+              });
+            }
+
+  cleanup-preview:
+    name: Teardown Preview Stack
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Teardown Preview Stack via Tailscale SSH
+        run: |
+          tailscale ssh root@staging-server << 'EOF'
+            PR_NUM="${{ github.event.number }}"
+            REPO_DIR="/opt/secretshare"
+            WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
+
+            echo "=== Tearing down PR ${PR_NUM} stack and volumes ==="
+            if [ -d "${WORKTREE_DIR}" ]; then
+              PR_NUMBER="${PR_NUM}" docker compose -p "pr-${PR_NUM}" -f "${WORKTREE_DIR}/docker-compose.preview.yml" down -v --remove-orphans || true
+              cd "${REPO_DIR}"
+              git worktree remove --force "${WORKTREE_DIR}" || true
+              git branch -D "pr-${PR_NUM}" || true
+            else
+              docker compose -p "pr-${PR_NUM}" down -v || true
+            fi
+          EOF
