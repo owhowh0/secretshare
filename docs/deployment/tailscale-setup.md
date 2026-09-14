@@ -106,26 +106,35 @@ In your GitHub repository, navigate to **Settings** $\rightarrow$ **Secrets and 
 
 ---
 
-## 4. How Developers Use Staging & Previews
+## 4. How Developers Access Environments
 
-### A. Testing API & Swagger UI
-1. Ensure Tailscale is running on the developer's laptop.
-2. Open the browser:
-   - **Staging API**: `http://api.staging-server/docs`
-   - **PR #42 Preview**: `http://pr-42.api.staging-server/docs`
-   - **Traefik Dashboard**: `http://staging-server:8080`
+### A. URL Structure (Pure Tailscale MagicDNS, Zero `/etc/hosts` Setup)
 
-### B. Viewing Logs (SSH)
-Connect via Tailscale SSH as `devuser` (zero keys needed):
+| Environment | Purpose | URL |
+| :--- | :--- | :--- |
+| **PR Preview Docs** | Test API for PR #N | `http://staging-server/pr-<N>/docs` |
+| **PR Preview Health** | Verify PR #N container status | `http://staging-server/pr-<N>/health` |
+| **Main Staging Docs** | Current release on `main` | `http://staging-server/docs` |
+| **Traefik Dashboard** | Real-time container routing | `http://staging-server:8080/dashboard/` |
+
+> [!TIP]
+> Because this uses path-based routing under `http://staging-server/`, **no `/etc/hosts` editing or third-party DNS is needed**. Any team member connected to Tailscale can simply click the URL.
+
+### B. SSH Access into the Server
+
+To SSH into the server, specify the allowed user:
 ```bash
 ssh devuser@staging-server
+# or:
+tailscale ssh devuser@staging-server
 ```
-Inspect logs for a specific PR preview:
+
+To inspect logs for a specific PR preview:
 ```bash
-docker compose -p pr-42 -f /opt/secretshare/worktrees/pr-42/docker-compose.preview.yml logs -f api
+docker compose -p pr-1 -f /opt/secretshare/worktrees/pr-1/docker-compose.preview.yml logs -f api
 ```
 
 ### C. Database Connection
-Connect local GUI tools (TablePlus, DBeaver) directly:
-- Host: `staging-server`
-- Port: `5432` (staging) or port mapped to the specific service.
+Connect local GUI tools (TablePlus, DBeaver) directly over Tailscale:
+- **Host**: `staging-server`
+- **Port**: `5432` (staging) or port mapped to the specific service.
