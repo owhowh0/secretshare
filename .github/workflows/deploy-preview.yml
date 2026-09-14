@@ -76,10 +76,7 @@ jobs:
             echo "=== Building & launching isolated stack ==="
             cd "${WORKTREE_DIR}"
             PR_SECRET=$(openssl rand -hex 16)
-            cat << ENVEOF > .env
-PR_NUMBER=${PR_NUM}
-POSTGRES_PASSWORD=${PR_SECRET}
-ENVEOF
+            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" > .env
             docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
           EOF
 
