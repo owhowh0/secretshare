@@ -29,9 +29,15 @@ jobs:
             set -euo pipefail
             REPO_DIR="/opt/secretshare"
 
+            if [ ! -d "${REPO_DIR}/.git" ]; then
+              echo "=== Initializing repository in ${REPO_DIR} ==="
+              rm -rf "${REPO_DIR}"
+              git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "${REPO_DIR}"
+            fi
+
             echo "=== Pulling latest changes on branch ==="
             cd "${REPO_DIR}"
-            git fetch origin
+            git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
             git checkout main || git checkout develop
             git pull origin $(git rev-parse --abbrev-ref HEAD)
 

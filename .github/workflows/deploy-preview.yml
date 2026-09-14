@@ -41,9 +41,15 @@ jobs:
             echo "=== Ensuring base traefik-net exists ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
 
+            if [ ! -d "${REPO_DIR}/.git" ]; then
+              echo "=== Initializing repository in ${REPO_DIR} ==="
+              rm -rf "${REPO_DIR}"
+              git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "${REPO_DIR}"
+            fi
+
             echo "=== Syncing PR branch to worktree ==="
             cd "${REPO_DIR}"
-            git fetch origin "pull/${PR_NUM}/head:pr-${PR_NUM}"
+            git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "pull/${PR_NUM}/head:pr-${PR_NUM}"
             git worktree add -f "${WORKTREE_DIR}" "pr-${PR_NUM}"
 
             echo "=== Building & launching isolated stack ==="
