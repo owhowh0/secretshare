@@ -32,12 +32,13 @@ jobs:
             if [ ! -d "${REPO_DIR}/.git" ]; then
               echo "=== Initializing repository in ${REPO_DIR} ==="
               rm -rf "${REPO_DIR}"
-              git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "${REPO_DIR}"
+              git clone "https://github.com/${{ github.repository }}.git" "${REPO_DIR}"
             fi
 
             echo "=== Pulling latest changes on branch ==="
             cd "${REPO_DIR}"
-            git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            git remote set-url origin "https://github.com/${{ github.repository }}.git"
+            git fetch origin
             git checkout main || git checkout develop
             git pull origin $(git rev-parse --abbrev-ref HEAD)
 

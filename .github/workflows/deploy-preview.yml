@@ -40,7 +40,7 @@ jobs:
 
             echo "=== Ensuring base traefik router exists ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
-            if ! docker ps --format '{{.Names}}' | grep -q "^traefik$"; then
+            if [ -z "$(docker ps -q -f name=^traefik$)" ]; then
               docker run -d \
                 --name traefik \
                 --restart unless-stopped \
@@ -59,12 +59,13 @@ jobs:
             if [ ! -d "${REPO_DIR}/.git" ]; then
               echo "=== Initializing repository in ${REPO_DIR} ==="
               rm -rf "${REPO_DIR}"
-              git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "${REPO_DIR}"
+              git clone "https://github.com/${{ github.repository }}.git" "${REPO_DIR}"
             fi
 
             echo "=== Syncing PR branch to worktree ==="
             cd "${REPO_DIR}"
-            git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "pull/${PR_NUM}/head"
+            git remote set-url origin "https://github.com/${{ github.repository }}.git"
+            git fetch origin "pull/${PR_NUM}/head"
             if [ -d "${WORKTREE_DIR}" ]; then
               cd "${WORKTREE_DIR}"
               git reset --hard FETCH_HEAD
