@@ -64,8 +64,13 @@ jobs:
 
             echo "=== Syncing PR branch to worktree ==="
             cd "${REPO_DIR}"
-            git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "pull/${PR_NUM}/head:pr-${PR_NUM}"
-            git worktree add -f "${WORKTREE_DIR}" "pr-${PR_NUM}"
+            git fetch "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "pull/${PR_NUM}/head"
+            if [ -d "${WORKTREE_DIR}" ]; then
+              cd "${WORKTREE_DIR}"
+              git reset --hard FETCH_HEAD
+            else
+              git worktree add -f -B "pr-${PR_NUM}" "${WORKTREE_DIR}" FETCH_HEAD
+            fi
 
             echo "=== Building & launching isolated stack ==="
             cd "${WORKTREE_DIR}"
