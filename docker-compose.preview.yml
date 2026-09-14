@@ -22,8 +22,10 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=Host(`pr-${PR_NUMBER}.api.staging-server`) || Host(`pr-${PR_NUMBER}.api.localhost`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=PathPrefix(`/pr-${PR_NUMBER}`) || Host(`pr-${PR_NUMBER}.api.staging-server`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-strip"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=/pr-${PR_NUMBER}"
       - "traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=8000"
     networks:
       - default

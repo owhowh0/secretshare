@@ -78,9 +78,10 @@ jobs:
         with:
           script: |
             const prNumber = context.issue.number;
-            const previewUrl = `http://pr-${prNumber}.api.staging-server/docs`;
+            const previewUrl = `http://staging-server/pr-${prNumber}/docs`;
+            const healthUrl = `http://staging-server/pr-${prNumber}/health`;
             const commentIdentifier = "<!-- preview-deployment-comment -->";
-            const body = `${commentIdentifier}\n### 🚀 Preview Environment Ready\n\n- **API Documentation / Swagger**: [${previewUrl}](${previewUrl})\n- **Health Check**: \`http://pr-${prNumber}.api.staging-server/health\`\n\n> *Accessible securely to team members on Tailscale.*`;
+            const body = `${commentIdentifier}\n### 🚀 Preview Environment Ready\n\n- **API Documentation / Swagger**: [${previewUrl}](${previewUrl})\n- **Health Check**: \`${healthUrl}\`\n\n> *Accessible securely to team members on Tailscale (Zero /etc/hosts configuration).*`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
