@@ -120,17 +120,36 @@ In your GitHub repository, navigate to **Settings** $\rightarrow$ **Secrets and 
 > [!TIP]
 > Because this uses path-based routing under `http://staging-server/`, **no `/etc/hosts` editing or third-party DNS is needed**. Any team member connected to Tailscale can simply click the URL.
 
-### B. SSH Access into the Server
+### B. Viewing Logs (SSH)
 
-To SSH into the server, specify the allowed user:
+SSH into the server:
 ```bash
 ssh devuser@staging-server
-# or:
-tailscale ssh devuser@staging-server
 ```
 
-To inspect logs for a specific PR preview:
+#### 1. The Fastest & Simplest Way (Direct Docker Logs - No Warnings)
+Works from any directory:
 ```bash
+# View API logs for PR #1 (streaming)
+docker logs -f pr-1-api-1
+
+# View Postgres logs for PR #1
+docker logs -f pr-1-db-1
+
+# View Redis logs for PR #1
+docker logs -f pr-1-redis-1
+
+# View Traefik router logs
+docker logs -f traefik
+```
+
+#### 2. Using Docker Compose
+```bash
+# From within the PR worktree directory:
+cd /opt/secretshare/worktrees/pr-1
+docker compose logs -f api
+
+# Or from any directory:
 docker compose -p pr-1 -f /opt/secretshare/worktrees/pr-1/docker-compose.preview.yml logs -f api
 ```
 

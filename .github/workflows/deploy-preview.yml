@@ -76,7 +76,11 @@ jobs:
             echo "=== Building & launching isolated stack ==="
             cd "${WORKTREE_DIR}"
             PR_SECRET=$(openssl rand -hex 16)
-            PR_NUMBER="${PR_NUM}" POSTGRES_PASSWORD="${PR_SECRET}" docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
+            cat << ENVEOF > .env
+PR_NUMBER=${PR_NUM}
+POSTGRES_PASSWORD=${PR_SECRET}
+ENVEOF
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
           EOF
 
       - name: Comment Preview URL on PR
