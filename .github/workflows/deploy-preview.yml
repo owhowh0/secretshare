@@ -38,8 +38,23 @@ jobs:
             REPO_DIR="/opt/secretshare"
             WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
 
-            echo "=== Ensuring base traefik-net exists ==="
+            echo "=== Ensuring base traefik router exists ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
+            if ! docker ps --format '{{.Names}}' | grep -q "^traefik$"; then
+              docker run -d \
+                --name traefik \
+                --restart unless-stopped \
+                -p 80:80 \
+                -p 8080:8080 \
+                -v /var/run/docker.sock:/var/run/docker.sock:ro \
+                --network traefik-net \
+                traefik:latest \
+                --api.insecure=true \
+                --providers.docker=true \
+                --providers.docker.exposedbydefault=false \
+                --providers.docker.network=traefik-net \
+                --entrypoints.web.address=:80
+            fi
 
             if [ ! -d "${REPO_DIR}/.git" ]; then
               echo "=== Initializing repository in ${REPO_DIR} ==="
