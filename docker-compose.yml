@@ -97,7 +97,7 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/keycloak/health/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
