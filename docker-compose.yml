@@ -36,7 +36,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-secretshare}
       - REDIS_URL=redis://redis:6379/0
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-}
+      - KEYCLOAK_URL=http://keycloak:8080/keycloak
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
     depends_on:
@@ -84,8 +84,36 @@ services:
     networks:
       - default
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: /keycloak
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=PathPrefix(`/keycloak`)"
+      - "traefik.http.routers.keycloak.entrypoints=web"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - traefik-net
+
 volumes:
   pgdata:
+  keycloak-data:
 
 networks:
   traefik-net:

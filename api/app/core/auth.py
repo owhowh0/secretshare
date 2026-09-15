@@ -39,7 +39,9 @@ async def _fetch_jwks(settings: Settings, *, force: bool = False) -> dict:
     return _jwks_cache
 
 
-async def _get_signing_key(token: str, settings: Settings) -> dict:
+async def _get_signing_key(
+    token: str, settings: Settings, *, force: bool = False
+) -> dict:
     """
     Returns the JWK whose kid matches the token header.
     On a cache miss, refreshes the JWKS once to handle key rotation.
@@ -47,7 +49,7 @@ async def _get_signing_key(token: str, settings: Settings) -> dict:
     header = jwt.get_unverified_header(token)
     kid = header.get("kid")
 
-    jwks = await _fetch_jwks(settings)
+    jwks = await _fetch_jwks(settings, force=force)
     key = next((k for k in jwks["keys"] if k.get("kid") == kid), None)
 
     if key is None:
@@ -75,12 +77,23 @@ async def get_current_user(
     token = credentials.credentials
     try:
         key = await _get_signing_key(token, settings)
-        claims = jwt.decode(
-            token,
-            key,
-            algorithms=["RS256"],
-            audience=settings.keycloak_client_id,
-        )
+        try:
+            claims = jwt.decode(
+                token,
+                key,
+                algorithms=["RS256"],
+                audience=settings.keycloak_client_id,
+            )
+        except JWTError as exc:
+            if str(exc) != "Signature verification failed.":
+                raise
+            key = await _get_signing_key(token, settings, force=True)
+            claims = jwt.decode(
+                token,
+                key,
+                algorithms=["RS256"],
+                audience=settings.keycloak_client_id,
+            )
     except JWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
