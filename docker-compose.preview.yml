@@ -85,7 +85,7 @@ services:
       resources:
         limits:
           cpus: "0.50"
-          memory: 512M
+          memory: 1024M
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/pr-${PR_NUMBER}/keycloak/health/ready || exit 1"]
       interval: 10s
