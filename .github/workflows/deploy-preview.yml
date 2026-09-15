@@ -88,7 +88,7 @@ jobs:
             const prNumber = context.issue.number;
             const previewUrl = `http://staging-server/pr-${prNumber}/docs`;
             const healthUrl = `http://staging-server/pr-${prNumber}/health`;
-            const keycloakUrl = `http://pr-${prNumber}.keycloak.staging-server`;
+            const keycloakUrl = `http://staging-server/pr-${prNumber}/keycloak`;
             const commentIdentifier = "<!-- preview-deployment-comment -->";
             const body = [
               commentIdentifier,
