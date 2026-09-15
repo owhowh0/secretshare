@@ -10,6 +10,9 @@ services:
       - DATABASE_URL=postgresql+asyncpg://secretshare:${POSTGRES_PASSWORD}@db:5432/secretshare_pr_${PR_NUMBER}
       - REDIS_URL=redis://redis:6379/0
       - PR_NUMBER=${PR_NUMBER}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
     deploy:
       resources:
         limits:
