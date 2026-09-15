@@ -7,3 +7,7 @@ class SecretCreateRequest(BaseModel):
 
 class SecretCreateResponse(BaseModel):
     payload_id: str
+
+
+class SecretRetrieveResponse(BaseModel):
+    ciphertext: str
