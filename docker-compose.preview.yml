@@ -82,7 +82,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /pr-${PR_NUMBER}/keycloak
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/health/ready || exit 1"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
       interval: 10s
       timeout: 5s
       retries: 10
