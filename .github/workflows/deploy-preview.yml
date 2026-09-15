@@ -76,7 +76,8 @@ jobs:
             echo "=== Building & launching isolated stack ==="
             cd "${WORKTREE_DIR}"
             PR_SECRET=$(openssl rand -hex 16)
-            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" > .env
+            KC_SECRET=$(openssl rand -hex 16)
+            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" > .env
             docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
           EOF
 
@@ -87,8 +88,18 @@ jobs:
             const prNumber = context.issue.number;
             const previewUrl = `http://staging-server/pr-${prNumber}/docs`;
             const healthUrl = `http://staging-server/pr-${prNumber}/health`;
+            const keycloakUrl = `http://pr-${prNumber}.keycloak.staging-server`;
             const commentIdentifier = "<!-- preview-deployment-comment -->";
-            const body = `${commentIdentifier}\n### 🚀 Preview Environment Ready\n\n- **API Documentation / Swagger**: [${previewUrl}](${previewUrl})\n- **Health Check**: \`${healthUrl}\`\n\n> *Accessible securely to team members on Tailscale (Zero /etc/hosts configuration).*`;
+            const body = [
+              commentIdentifier,
+              "### 🚀 Preview Environment Ready",
+              "",
+              `- **API Docs / Swagger**: [${previewUrl}](${previewUrl})`,
+              `- **Health Check**: \`${healthUrl}\``,
+              `- **Keycloak Admin Console**: [${keycloakUrl}](${keycloakUrl}) — user: \`admin\``,
+              "",
+              "> *Accessible to team members on Tailscale.*",
+            ].join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,

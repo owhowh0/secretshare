@@ -10,7 +10,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://secretshare:${POSTGRES_PASSWORD}@db:5432/secretshare_pr_${PR_NUMBER}
       - REDIS_URL=redis://redis:6379/0
       - PR_NUMBER=${PR_NUMBER}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-}
+      - KEYCLOAK_URL=http://keycloak:8080
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
     deploy:
@@ -70,6 +70,35 @@ services:
       retries: 5
     networks:
       - default
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=Host(`pr-${PR_NUMBER}.keycloak.staging-server`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.entrypoints=web"
+      - "traefik.http.services.pr-${PR_NUMBER}-keycloak.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - traefik-net
 
 volumes:
   pr-pgdata:
