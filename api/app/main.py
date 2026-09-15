@@ -1,10 +1,9 @@
 import os
 from contextlib import asynccontextmanager
 
+from app.api.routes.secrets import router as secrets_router
 from fastapi import FastAPI
 from redis.asyncio import Redis
-
-from app.api.routes.secrets import router as secrets_router
 
 root_path = f"/pr-{os.environ['PR_NUMBER']}" if os.getenv("PR_NUMBER") else ""
 
@@ -36,6 +35,7 @@ app.include_router(secrets_router)
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "ok"}
+
 
 @app.get("/", tags=["Root"])
 async def root():
