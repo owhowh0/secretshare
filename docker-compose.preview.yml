@@ -91,6 +91,7 @@ services:
       - "traefik.enable=true"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=PathPrefix(`/pr-${PR_NUMBER}/keycloak`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.entrypoints=web"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.priority=200"
       - "traefik.http.services.pr-${PR_NUMBER}-keycloak.loadbalancer.server.port=8080"
     networks:
       - default
