@@ -1,0 +1,145 @@
+name: PR Preview Deployment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    name: Deploy Ephemeral Preview
+    if: |
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy Preview Stack via Tailscale SSH
+        env:
+          PR_NUM: ${{ github.event.number }}
+        run: |
+          tailscale ssh root@staging-server << 'EOF'
+            set -euo pipefail
+            PR_NUM="${{ github.event.number }}"
+            REPO_DIR="/opt/secretshare"
+            WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
+
+            echo "=== Ensuring base traefik router exists ==="
+            docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
+            if [ -z "$(docker ps -q -f name=^traefik$)" ]; then
+              docker run -d \
+                --name traefik \
+                --restart unless-stopped \
+                -p 80:80 \
+                -p 8080:8080 \
+                -v /var/run/docker.sock:/var/run/docker.sock:ro \
+                --network traefik-net \
+                traefik:latest \
+                --api.insecure=true \
+                --providers.docker=true \
+                --providers.docker.exposedbydefault=false \
+                --providers.docker.network=traefik-net \
+                --entrypoints.web.address=:80
+            fi
+
+            if [ ! -d "${REPO_DIR}/.git" ]; then
+              echo "=== Initializing repository in ${REPO_DIR} ==="
+              rm -rf "${REPO_DIR}"
+              git clone "https://github.com/${{ github.repository }}.git" "${REPO_DIR}"
+            fi
+
+            echo "=== Syncing PR branch to worktree ==="
+            if [ -d "${WORKTREE_DIR}" ]; then
+              cd "${WORKTREE_DIR}"
+              git fetch origin "pull/${PR_NUM}/head"
+              git reset --hard FETCH_HEAD
+            else
+              cd "${REPO_DIR}"
+              git fetch origin "pull/${PR_NUM}/head"
+              git worktree add -f --detach "${WORKTREE_DIR}" FETCH_HEAD
+            fi
+
+            echo "=== Building & launching isolated stack ==="
+            cd "${WORKTREE_DIR}"
+            PR_SECRET=$(openssl rand -hex 16)
+            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" > .env
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
+          EOF
+
+      - name: Comment Preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.issue.number;
+            const previewUrl = `http://staging-server/pr-${prNumber}/docs`;
+            const healthUrl = `http://staging-server/pr-${prNumber}/health`;
+            const commentIdentifier = "<!-- preview-deployment-comment -->";
+            const body = `${commentIdentifier}\n### 🚀 Preview Environment Ready\n\n- **API Documentation / Swagger**: [${previewUrl}](${previewUrl})\n- **Health Check**: \`${healthUrl}\`\n\n> *Accessible securely to team members on Tailscale (Zero /etc/hosts configuration).*`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const existingComment = comments.find(c => c.body.includes(commentIdentifier));
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: body,
+              });
+            }
+
+  cleanup-preview:
+    name: Teardown Preview Stack
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Teardown Preview Stack via Tailscale SSH
+        run: |
+          tailscale ssh root@staging-server << 'EOF'
+            PR_NUM="${{ github.event.number }}"
+            REPO_DIR="/opt/secretshare"
+            WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
+
+            echo "=== Tearing down PR ${PR_NUM} stack and volumes ==="
+            if [ -d "${WORKTREE_DIR}" ]; then
+              PR_NUMBER="${PR_NUM}" docker compose -p "pr-${PR_NUM}" -f "${WORKTREE_DIR}/docker-compose.preview.yml" down -v --remove-orphans || true
+              cd "${REPO_DIR}"
+              git worktree remove --force "${WORKTREE_DIR}" || true
+              git branch -D "pr-${PR_NUM}" || true
+            else
+              docker compose -p "pr-${PR_NUM}" down -v || true
+            fi
+          EOF
