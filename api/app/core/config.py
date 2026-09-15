@@ -8,8 +8,7 @@ class Settings(BaseSettings):
     keycloak_realm: str = ""      # e.g. secretshare
     keycloak_client_id: str = ""  # e.g. secretshare-api
 
-    class Config:
-        env_file = ".env"
+    model_config = {"env_file": ".env"}
 
 
 @lru_cache
