@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecretShare</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    main {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
+
+    section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      padding: 0.75rem;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: inherit;
+      font-family: inherit;
+      font-size: 0.95rem;
+      resize: vertical;
+    }
+
+    textarea:focus, input:focus { outline: 2px solid #4f8ef7; border-color: transparent; }
+
+    button {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: opacity 0.15s;
+      background: #4f8ef7;
+      color: #fff;
+    }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:hover:not(:disabled) { opacity: 0.88; }
+
+    .error {
+      font-size: 0.85rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 6px;
+      background: #2d1f1f;
+      border: 1px solid #4a2e2e;
+      color: #c87e7e;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.95rem;
+    }
+
+    hr { border: none; border-top: 1px solid #222; }
+
+    .muted { font-size: 0.85rem; color: #888; font-family: monospace; }
+  </style>
+</head>
+<body>
+<main>
+
+  <section>
+    <h2>Create secret</h2>
+    <textarea id="secret" rows="5" placeholder="Type your secret here…"></textarea>
+    <button id="create-btn">Create</button>
+    <p id="create-result" hidden class="muted"></p>
+    <p id="create-error" hidden class="error"></p>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Retrieve secret</h2>
+    <input type="text" id="payload-id" placeholder="Payload ID">
+    <button id="retrieve-btn">Retrieve</button>
+    <pre id="retrieve-result" hidden></pre></pre>
+    <p id="retrieve-error" hidden class="error"></p>
+  </section>
+
+</main>
+<script>
+  const API = 'http://api.localhost';
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  document.getElementById('create-btn').addEventListener('click', async () => {
+    const secret = document.getElementById('secret').value.trim();
+    if (!secret) return;
+
+    const btn = document.getElementById('create-btn');
+    const result = document.getElementById('create-result');
+    const error = document.getElementById('create-error');
+    btn.disabled = true;
+    result.hidden = true;
+    error.hidden = true;
+
+    try {
+      const res = await fetch(`${API}/secrets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ciphertext: secret }),
+      });
+      if (!res.ok) throw new Error(`API returned ${res.status}`);
+
+      const { payload_id } = await res.json();
+      result.textContent = payload_id;
+      result.hidden = false;
+    } catch (e) {
+      error.textContent = e.message;
+      error.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('retrieve-btn').addEventListener('click', async () => {
+    const id = document.getElementById('payload-id').value.trim();
+    if (!id) return;
+
+    const btn = document.getElementById('retrieve-btn');
+    const result = document.getElementById('retrieve-result');
+    const error = document.getElementById('retrieve-error');
+    btn.disabled = true;
+    result.hidden = true;
+    error.hidden = true;
+
+    try {
+      const res = await fetch(`${API}/secrets/${id}`);
+      if (res.status === 404) throw new Error('Secret not found.');
+      if (!res.ok) throw new Error(`API returned ${res.status}`);
+
+      const { ciphertext } = await res.json();
+      result.innerHTML = escapeHtml(ciphertext);
+      result.hidden = false;
+    } catch (e) {
+      error.textContent = e.message;
+      error.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
