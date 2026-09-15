@@ -72,4 +72,75 @@ def jwks_document(rsa_private_key) -> dict:
 def make_token(
     private_key_pem: bytes,
     *,
-    audience
+    audience: str = TEST_CLIENT_ID,
+    exp_delta: int = 300,
+    kid: str = TEST_KID,
+    **extra_claims,
+) -> str:
+    """Signs a JWT with our test RSA private key."""
+    from jose import jwt
+
+    claims = {
+        "sub": "user-123",
+        "email": "test@example.com",
+        "preferred_username": "testuser",
+        "aud": audience,
+        "iss": f"{TEST_KEYCLOAK_URL}/realms/{TEST_REALM}",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + exp_delta,
+        **extra_claims,
+    }
+    return jwt.encode(claims, private_key_pem, algorithm="RS256", headers={"kid": kid})
+
+
+# ---------------------------------------------------------------------------
+# Test client fixtures
+# ---------------------------------------------------------------------------
+def _override_settings() -> Settings:
+    return Settings(
+        keycloak_url=TEST_KEYCLOAK_URL,
+        keycloak_realm=TEST_REALM,
+        keycloak_client_id=TEST_CLIENT_ID,
+    )
+
+
+@pytest_asyncio.fixture
+async def client(monkeypatch, jwks_document):
+    """
+    AsyncClient with settings overridden and _fetch_jwks mocked
+    to return our test JWKS document without hitting the network.
+    """
+    auth_module._jwks_cache = None
+    auth_module._jwks_fetched_at = 0.0
+    app.dependency_overrides[get_settings] = _override_settings
+
+    async def _mock_fetch_jwks(settings, *, force=False):
+        return jwks_document
+
+    monkeypatch.setattr(auth_module, "_fetch_jwks", _mock_fetch_jwks)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def client_no_keycloak(monkeypatch):
+    """
+    Same as client but _fetch_jwks raises a connection error,
+    simulating Keycloak being unreachable.
+    """
+    auth_module._jwks_cache = None
+    auth_module._jwks_fetched_at = 0.0
+    app.dependency_overrides[get_settings] = _override_settings
+
+    async def _mock_fetch_jwks_fail(settings, *, force=False):
+        raise httpx.ConnectError("Connection refused")
+
+    monkeypatch.setattr(auth_module, "_fetch_jwks", _mock_fetch_jwks_fail)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
