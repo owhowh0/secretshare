@@ -81,11 +81,6 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /pr-${PR_NUMBER}/keycloak
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 1024M
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/pr-${PR_NUMBER}/keycloak/health/ready || exit 1"]
       interval: 10s
