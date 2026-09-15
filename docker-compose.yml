@@ -118,3 +118,4 @@ volumes:
 networks:
   traefik-net:
     name: traefik-net
+    external: true
