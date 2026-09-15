@@ -11,8 +11,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - PR_NUMBER=${PR_NUMBER}
       - KEYCLOAK_URL=http://keycloak:8080/pr-${PR_NUMBER}/keycloak
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
-      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
     deploy:
       resources:
         limits:
