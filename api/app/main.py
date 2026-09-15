@@ -2,7 +2,8 @@ import os
 from contextlib import asynccontextmanager
 
 from app.api.routes.secrets import router as secrets_router
-from fastapi import FastAPI
+from app.core.auth import get_current_user
+from fastapi import Depends, FastAPI
 from redis.asyncio import Redis
 
 root_path = f"/pr-{os.environ['PR_NUMBER']}" if os.getenv("PR_NUMBER") else ""
@@ -40,3 +41,12 @@ async def health_check():
 @app.get("/", tags=["Root"])
 async def root():
     return {"message": "Welcome to SecretShare API"}
+
+
+@app.get("/me", tags=["Auth"])
+async def me(claims: dict = Depends(get_current_user)):
+    """
+    Returns the decoded Keycloak token claims for the current user.
+    Use this to verify OAuth is wired up correctly.
+    """
+    return claims
