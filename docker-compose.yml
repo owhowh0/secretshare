@@ -35,9 +35,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-secretshare}
       - POSTGRES_DB=${POSTGRES_DB:-secretshare}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-secretshare}
-      - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}/0}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/keycloak}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare}
+      - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:6379/0}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080${KEYCLOAK_PATH:-/keycloak}}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
     depends_on:
@@ -87,6 +87,30 @@ services:
     networks:
       - default
 
+  keycloak-db-init:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-secretshare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-secretshare}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - |
+        echo "Ensuring Keycloak database $${KEYCLOAK_DB} exists..."
+        psql -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" <<-EOSQL
+          SELECT format('CREATE DATABASE %I', '$${KEYCLOAK_DB}')
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$${KEYCLOAK_DB}')\gexec
+          GRANT ALL PRIVILEGES ON DATABASE "$${KEYCLOAK_DB}" TO "$${POSTGRES_USER}";
+        EOSQL
+    networks:
+      - default
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: start-dev --import-realm
@@ -98,7 +122,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:${POSTGRES_PORT:-5432}/${KEYCLOAK_DB:-keycloak}
+      KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak}
       KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
@@ -107,6 +131,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      keycloak-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
       interval: 10s

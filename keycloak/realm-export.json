@@ -23,10 +23,23 @@
       "protocol": "openid-connect",
       "fullScopeAllowed": true,
       "redirectUris": [
-        "*"
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1:*/*",
+        "http://app.localhost/*",
+        "http://app.localhost:*/*",
+        "http://staging-server/*",
+        "http://staging-server:*/*",
+        "http://*.staging-server/*",
+        "http://*.staging-server:*/*"
       ],
       "webOrigins": [
-        "*"
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://app.localhost",
+        "http://staging-server",
+        "http://*.staging-server"
       ]
     }
   ],
