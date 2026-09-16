@@ -31,7 +31,7 @@ else
   export KEYCLOAK_URL="${KEYCLOAK_URL:-http://127.0.0.1:${TRAEFIK_PORT}/keycloak}"
 fi
 
-export API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:${TRAEFIK_PORT}}"
+export API_BASE_URL="${API_BASE_URL:-}"
 export KEYCLOAK_REALM="${KEYCLOAK_REALM:-secretshare}"
 export KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-secretshare-api}"
 export TEST_USER_USERNAME="${TEST_USER_USERNAME:-testuser}"
@@ -40,7 +40,11 @@ export TEST_USER_EMAIL="${TEST_USER_EMAIL:-test@example.com}"
 export REQUIRE_KEYCLOAK=1
 
 echo "Target Keycloak: ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}"
-echo "Target API:      ${API_BASE_URL}"
+if [ -n "${API_BASE_URL}" ]; then
+  echo "Target API:      ${API_BASE_URL} (live HTTP)"
+else
+  echo "Target API:      In-process ASGI application"
+fi
 
 MAX_ATTEMPTS=15
 ATTEMPT=1
@@ -52,7 +56,7 @@ done
 
 if ! curl -s -f -o /dev/null "${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}"; then
   echo "Error: Keycloak is not responding at ${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}"
-  echo "Tip: Run 'docker compose up -d db keycloak traefik' first."
+  echo "Tip: Run 'docker compose up -d db keycloak' first."
   exit 1
 fi
 
