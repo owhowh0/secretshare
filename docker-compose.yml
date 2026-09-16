@@ -102,6 +102,7 @@ services:
       - /bin/sh
       - -c
       - |
+        set -e
         echo "Ensuring Keycloak database $${KEYCLOAK_DB} exists..."
         psql -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" <<-EOSQL
           SELECT format('CREATE DATABASE %I', '$${KEYCLOAK_DB}')

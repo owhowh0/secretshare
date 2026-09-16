@@ -73,11 +73,30 @@ jobs:
               git worktree add -f --detach "${WORKTREE_DIR}" FETCH_HEAD
             fi
 
-            echo "=== Building & launching isolated stack ==="
+            echo "=== Preparing isolated stack environment ==="
             cd "${WORKTREE_DIR}"
-            PR_SECRET=$(openssl rand -hex 16)
-            KC_SECRET=$(openssl rand -hex 16)
+            if [ -f .env ]; then
+              PR_SECRET=$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2- || true)
+              KC_SECRET=$(grep '^KEYCLOAK_ADMIN_PASSWORD=' .env | cut -d= -f2- || true)
+            fi
+            PR_SECRET="${PR_SECRET:-$(openssl rand -hex 16)}"
+            KC_SECRET="${KC_SECRET:-$(openssl rand -hex 16)}"
             printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" > .env
+
+            echo "=== Starting database service ==="
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d db
+
+            echo "=== Waiting for database readiness and syncing credentials ==="
+            for i in $(seq 1 30); do
+              if docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db pg_isready -U secretshare -d "secretshare_pr_${PR_NUM}" >/dev/null 2>&1; then
+                break
+              fi
+              sleep 1
+            done
+            # Ensure PostgreSQL user password matches .env even if the persistent volume was initialized earlier with different credentials
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db psql -U secretshare -d postgres -c "ALTER USER secretshare WITH PASSWORD '${PR_SECRET}';"
+
+            echo "=== Building & launching isolated stack ==="
             docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
           EOF
 

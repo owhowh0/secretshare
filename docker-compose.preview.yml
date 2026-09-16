@@ -10,7 +10,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare_pr_${PR_NUMBER}}
       - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:6379/0}
       - PR_NUMBER=${PR_NUMBER}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080${KEYCLOAK_PATH:-/pr-${PR_NUMBER}/keycloak}}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/pr-${PR_NUMBER}/keycloak}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
     deploy:
@@ -88,6 +88,7 @@ services:
       - /bin/sh
       - -c
       - |
+        set -e
         echo "Ensuring Keycloak database $${KEYCLOAK_DB} exists..."
         psql -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" <<-EOSQL
           SELECT format('CREATE DATABASE %I', '$${KEYCLOAK_DB}')
