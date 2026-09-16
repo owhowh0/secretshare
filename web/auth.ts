@@ -4,6 +4,8 @@ import Keycloak from "next-auth/providers/keycloak"
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  basePath: `${BASE_PATH}/api/auth`,
+  trustHost: true,
   providers: [
     Keycloak({
       clientId:
