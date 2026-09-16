@@ -70,6 +70,40 @@ class TestFrontendAssets:
         assert "sessionStorage.setItem('token'" in content
         assert "${API}/me" in content
 
+    def test_pkce_challenge_works_in_non_secure_context_without_subtle_crypto(self):
+        """Validates that PKCE challenge computation succeeds when crypto.subtle is undefined (non-HTTPS)."""
+        node_bin = shutil.which("node")
+        if not node_bin:
+            pytest.skip("Node.js not installed in environment, skipping non-secure context test.")
+
+        # Script simulates browser environment with window.crypto.subtle = undefined
+        test_script = f"""
+        const fs = require('fs');
+        const code = fs.readFileSync('{APP_JS}', 'utf8');
+        global.window = {{
+            location: {{ pathname: '/pr-9/', origin: 'http://staging-server', search: '' }},
+            crypto: {{}} // subtle is explicitly undefined (non-secure HTTP context)
+        }};
+        global.document = {{ title: 'Test', getElementById: () => null }};
+        global.btoa = (str) => Buffer.from(str, 'binary').toString('base64');
+
+        eval(code);
+
+        (async () => {{
+            const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+            const challenge = await sha256Challenge(verifier);
+            const expected = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+            if (challenge !== expected) {{
+                console.error(`Expected ${{expected}}, got ${{challenge}}`);
+                process.exit(1);
+            }}
+            console.log('PKCE RFC 7636 test vector matched successfully without crypto.subtle');
+        }})();
+        """
+
+        proc = subprocess.run([node_bin, "-e", test_script], capture_output=True, text=True)
+        assert proc.returncode == 0, f"Non-secure context PKCE test failed: {proc.stderr}"
+
 
 class TestPreviewSubpathResolutionEdgeCases:
     """Tests subpath RFC 3986 relative URL resolution and redirect protections."""
