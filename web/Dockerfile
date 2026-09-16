@@ -1,9 +1,9 @@
-FROM node:22-alpine AS deps
+FROM oven/bun:1-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
-FROM node:22-alpine AS builder
+FROM oven/bun:1-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -11,7 +11,7 @@ ARG NEXT_PUBLIC_BASE_PATH=""
 ARG NEXT_PUBLIC_API_BASE="/api"
 ENV NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 ENV NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE
-RUN npm run build
+RUN bun run build
 
 FROM node:22-alpine AS runner
 WORKDIR /app

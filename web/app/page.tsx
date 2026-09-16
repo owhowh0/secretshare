@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { fetchUser, getHeaders, handleCallback, logout, startLogin } from '../lib/auth'
+import { useState } from 'react'
+import { useSession, signIn, signOut } from 'next-auth/react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api'
 
 export default function Page() {
-  const [username, setUsername] = useState<string | null>(null)
+  const { data: session, status } = useSession()
+  const username = session?.user?.name ?? null
 
   const [secret, setSecret] = useState('')
   const [createResult, setCreateResult] = useState<string | null>(null)
@@ -18,24 +19,21 @@ export default function Page() {
   const [retrieveError, setRetrieveError] = useState<string | null>(null)
   const [retrieveLoading, setRetrieveLoading] = useState(false)
 
-  useEffect(() => {
-    async function init() {
-      if (window.location.search.includes('code=')) {
-        await handleCallback().catch(console.error)
-      }
-      const user = await fetchUser(API_BASE).catch(() => null)
-      setUsername(user?.preferred_username ?? user?.sub ?? null)
+  const getHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = (session as any)?.accessToken
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
     }
-    init()
-  }, [])
-
-  async function handleLogin() {
-    await startLogin().catch(err => alert('Failed to start login: ' + err.message))
+    return headers
   }
 
-  function handleLogout() {
-    logout()
-    setUsername(null)
+  async function handleLogin() {
+    await signIn('keycloak')
+  }
+
+  async function handleLogout() {
+    await signOut()
   }
 
   async function handleCreate() {
@@ -86,7 +84,7 @@ export default function Page() {
       <header>
         <h1>SecretShare</h1>
         <div id="auth-section">
-          {username ? (
+          {status === 'authenticated' && username ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span className="muted">{username}</span>
               <button id="logout-btn" onClick={handleLogout} style={{ background: '#333', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>

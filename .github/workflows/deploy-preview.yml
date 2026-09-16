@@ -34,6 +34,7 @@ jobs:
         run: |
           tailscale ssh root@staging-server "bash -s" << 'EOF'
             set -euxo pipefail
+            trap 'echo "!!! DEPLOYMENT FAILED AT LINE ${LINENO} (exit code: $?) !!!"' ERR
             PR_NUM="${{ github.event.number }}"
             REPO_DIR="/opt/secretshare"
             WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
@@ -78,13 +79,16 @@ jobs:
             if [ -f .env ]; then
               PR_SECRET=$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2- || true)
               KC_SECRET=$(grep '^KEYCLOAK_ADMIN_PASSWORD=' .env | cut -d= -f2- || true)
+              AUTH_SEC=$(grep '^AUTH_SECRET=' .env | cut -d= -f2- || true)
             fi
             PR_SECRET="${PR_SECRET:-$(openssl rand -hex 16)}"
             KC_SECRET="${KC_SECRET:-$(openssl rand -hex 16)}"
+            AUTH_SEC="${AUTH_SEC:-$(openssl rand -hex 32)}"
             export PR_NUMBER="${PR_NUM}"
             export POSTGRES_PASSWORD="${PR_SECRET}"
             export KEYCLOAK_ADMIN_PASSWORD="${KC_SECRET}"
-            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" > .env
+            export AUTH_SECRET="${AUTH_SEC}"
+            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\nAUTH_SECRET=%s\n" "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" "${AUTH_SEC}" > .env
 
             echo "=== Building & launching isolated stack ==="
             if ! docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans; then
@@ -96,55 +100,108 @@ jobs:
             echo "=== Verifying preview deployment health & routing ==="
             ATTEMPTS=0
             MAX_ATTEMPTS=30
-            until curl -s -f -L -m 5 "http://127.0.0.1/pr-${PR_NUM}/" >/dev/null && \
-                  curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/health" >/dev/null && \
-                  curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare" >/dev/null; do
+            READY=0
+            while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
               ATTEMPTS=$((ATTEMPTS + 1))
-              if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
-                echo "=== Preview verification timed out after ${MAX_ATTEMPTS} attempts! Container status: ==="
-                docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml ps
-                echo "=== Container logs: ==="
-                docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml logs --tail 50
-                exit 1
+              WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://127.0.0.1/pr-${PR_NUM}/" || echo "CURL_ERR_$?")
+              API_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/health" || echo "CURL_ERR_$?")
+              KC_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare" || echo "CURL_ERR_$?")
+              echo "[$(date +'%T')] [Attempt ${ATTEMPTS}/${MAX_ATTEMPTS}] Web: ${WEB_CODE} | API: ${API_CODE} | Keycloak: ${KC_CODE}"
+              if [ "${WEB_CODE}" = "200" ] && [ "${API_CODE}" = "200" ] && [ "${KC_CODE}" = "200" ]; then
+                echo "=== All services responded with 200 OK! ==="
+                READY=1
+                break
               fi
               sleep 2
             done
 
+            if [ "$READY" -ne 1 ]; then
+              echo "=== Preview verification timed out after ${MAX_ATTEMPTS} attempts! ==="
+              echo "=== Diagnostic curl to Web: ==="
+              curl -v -L -m 10 "http://127.0.0.1/pr-${PR_NUM}/" || true
+              echo "=== Diagnostic curl to API: ==="
+              curl -v -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/health" || true
+              echo "=== Diagnostic curl to Keycloak: ==="
+              curl -v -m 10 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare" || true
+              echo "=== Active Traefik Routers: ==="
+              curl -s http://127.0.0.1:8080/api/http/routers || true
+              echo "=== Container Status: ==="
+              docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml ps -a
+              echo "=== WEB CONTAINER LOGS (last 100 lines): ==="
+              docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml logs --tail 100 web || true
+              echo "=== API CONTAINER LOGS (last 100 lines): ==="
+              docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml logs --tail 100 api || true
+              echo "=== TRAEFIK LOGS (last 50 lines): ==="
+              docker logs --tail 50 traefik || true
+              exit 1
+            fi
+
             echo "=== 1. Testing trailing-slash redirect on /pr-${PR_NUM} ==="
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}" || echo "CURL_ERR_$?")
+            echo "-> Redirect status code: ${HTTP_CODE}"
             if [ "$HTTP_CODE" != "301" ] && [ "$HTTP_CODE" != "308" ] && [ "$HTTP_CODE" != "200" ]; then
               echo "Error: Unexpected HTTP code $HTTP_CODE for /pr-${PR_NUM}"
               exit 1
             fi
 
             echo "=== 2. Testing Frontend HTML & Assets ==="
-            HTML_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/")
-            echo "$HTML_OUTPUT" | grep -q 'id="login-btn"' || { echo "Error: login-btn missing in HTML"; exit 1; }
-            echo "$HTML_OUTPUT" | grep -q 'id="create-btn"' || { echo "Error: create-btn missing in HTML"; exit 1; }
+            HTML_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/" || {
+              echo "Error: curl failed to fetch /pr-${PR_NUM}/"
+              curl -v -m 10 "http://127.0.0.1/pr-${PR_NUM}/" || true
+              exit 1
+            })
+            echo "$HTML_OUTPUT" | grep -q 'id="login-btn"' || { echo "Error: login-btn missing in HTML"; echo "$HTML_OUTPUT"; exit 1; }
+            echo "$HTML_OUTPUT" | grep -q 'id="create-btn"' || { echo "Error: create-btn missing in HTML"; echo "$HTML_OUTPUT"; exit 1; }
             NEXT_ASSET_PATH=$(echo "$HTML_OUTPUT" | grep -oE "/pr-${PR_NUM}/_next/static/[^\"]+\\.js" | head -n1)
-            [ -n "$NEXT_ASSET_PATH" ] || { echo "Error: Next.js static asset reference missing in HTML"; exit 1; }
-            curl -s -f -m 5 "http://127.0.0.1${NEXT_ASSET_PATH}" >/dev/null || { echo "Error: Failed to fetch Next.js static asset"; exit 1; }
+            [ -n "$NEXT_ASSET_PATH" ] || { echo "Error: Next.js static asset reference missing in HTML"; echo "$HTML_OUTPUT"; exit 1; }
+            echo "-> Found Next.js static asset: ${NEXT_ASSET_PATH}"
+            curl -s -f -m 5 "http://127.0.0.1${NEXT_ASSET_PATH}" >/dev/null || {
+              echo "Error: Failed to fetch Next.js static asset ${NEXT_ASSET_PATH}"
+              curl -v -m 5 "http://127.0.0.1${NEXT_ASSET_PATH}" || true
+              exit 1
+            }
 
             echo "=== 3. Testing API Swagger Docs & OpenAPI Schema ==="
-            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/docs" >/dev/null || { echo "Error: /api/docs failed"; exit 1; }
-            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/openapi.json" | grep -q '"/health"' || { echo "Error: /api/openapi.json invalid"; exit 1; }
+            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/docs" >/dev/null || {
+              echo "Error: /api/docs failed"
+              curl -v -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/docs" || true
+              exit 1
+            }
+            OPENAPI_JSON=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/openapi.json" || {
+              echo "Error: /api/openapi.json failed to fetch"
+              exit 1
+            })
+            echo "$OPENAPI_JSON" | grep -q '"/health"' || { echo "Error: /api/openapi.json invalid"; echo "$OPENAPI_JSON"; exit 1; }
 
             echo "=== 4. Testing Keycloak OIDC Discovery & Token Issuance ==="
-            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare/.well-known/openid-configuration" | grep -q 'token_endpoint' || { echo "Error: OIDC discovery failed"; exit 1; }
+            OIDC_DISCOVERY=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare/.well-known/openid-configuration" || {
+              echo "Error: OIDC discovery request failed"
+              curl -v -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare/.well-known/openid-configuration" || true
+              exit 1
+            })
+            echo "$OIDC_DISCOVERY" | grep -q 'token_endpoint' || { echo "Error: OIDC discovery missing token_endpoint: $OIDC_DISCOVERY"; exit 1; }
 
             KC_TOKEN_RESPONSE=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare/protocol/openid-connect/token" \
               -H "Content-Type: application/x-www-form-urlencoded" \
-              -d "client_id=secretshare-api&grant_type=password&username=testuser&password=testpassword123&scope=openid")
+              -d "client_id=secretshare-api&grant_type=password&username=testuser&password=testpassword123&scope=openid" || {
+                echo "Error: Keycloak token endpoint POST failed"
+                exit 1
+              })
 
             ACCESS_TOKEN=$(echo "$KC_TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
             if [ -z "$ACCESS_TOKEN" ]; then
               echo "Error: Failed to obtain access_token from Keycloak: $KC_TOKEN_RESPONSE"
               exit 1
             fi
+            echo "-> Successfully acquired Keycloak test user token"
 
             echo "=== 5. Testing Protected /api/me Endpoint with Token ==="
             ME_RESPONSE=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/me" \
-              -H "Authorization: Bearer ${ACCESS_TOKEN}")
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" || {
+                echo "Error: /api/me failed with valid token"
+                curl -v -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/me" -H "Authorization: Bearer ${ACCESS_TOKEN}" || true
+                exit 1
+              })
             echo "$ME_RESPONSE" | grep -q '"preferred_username":"testuser"' || { echo "Error: /api/me returned unexpected user: $ME_RESPONSE"; exit 1; }
 
             CODE_NO_AUTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/me")
@@ -152,6 +209,7 @@ jobs:
 
             CODE_BAD_AUTH=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer invalid.token" "http://127.0.0.1/pr-${PR_NUM}/api/me")
             [ "$CODE_BAD_AUTH" = "401" ] || { echo "Error: Expected 401 for invalid token on /api/me, got $CODE_BAD_AUTH"; exit 1; }
+            echo "-> Auth guards verified (403 for no token, 401 for bad token)"
 
             echo "=== 6. Testing Authenticated Secret Lifecycle ==="
             AUTH_PAYLOAD_ID=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets" \
@@ -173,6 +231,7 @@ jobs:
 
             AUTH_BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${AUTH_PAYLOAD_ID}")
             [ "$AUTH_BURN_CODE" = "404" ] || { echo "Error: Expected 404 on second retrieval (burn), got $AUTH_BURN_CODE"; exit 1; }
+            echo "-> Authenticated secret lifecycle verified (created, retrieved, burned)"
 
             echo "=== 7. Testing Anonymous Secret Lifecycle ==="
             PAYLOAD_ID=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets" \
@@ -192,6 +251,7 @@ jobs:
 
             BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${PAYLOAD_ID}")
             [ "$BURN_CODE" = "404" ] || { echo "Error: Expected 404 on second retrieval (burn), got $BURN_CODE"; exit 1; }
+            echo "-> Anonymous secret lifecycle verified (created, retrieved, burned)"
 
             echo "=== Preview deployment and all verification tests passed successfully! ==="
           EOF

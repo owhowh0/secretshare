@@ -22,6 +22,19 @@ services:
       args:
         NEXT_PUBLIC_BASE_PATH: ""
         NEXT_PUBLIC_API_BASE: "/api"
+    environment:
+      - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
+      - AUTH_TRUST_HOST=true
+      - NEXTAUTH_URL=http://localhost/api/auth
+      - KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
+      - KEYCLOAK_CLIENT_ID=secretshare-api
+    extra_hosts:
+      - "localhost:host-gateway"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.web.rule=PathPrefix(`/`)"

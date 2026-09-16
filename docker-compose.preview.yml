@@ -6,11 +6,19 @@ services:
       args:
         NEXT_PUBLIC_BASE_PATH: "/pr-${PR_NUMBER}"
         NEXT_PUBLIC_API_BASE: "/pr-${PR_NUMBER}/api"
+    environment:
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_TRUST_HOST=true
+      - NEXTAUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
+      - KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
+      - KEYCLOAK_CLIENT_ID=secretshare-api
+    extra_hosts:
+      - "staging-server:host-gateway"
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 64M
+          cpus: "0.50"
+          memory: 256M
     labels:
       - "traefik.enable=true"
       # Redirect /pr-N to /pr-N/

@@ -6,8 +6,10 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WEB_DIR = REPO_ROOT / "web"
 APP_PAGE = WEB_DIR / "app" / "page.tsx"
-AUTH_TS = WEB_DIR / "lib" / "auth.ts"
+AUTH_TS = WEB_DIR / "auth.ts"
+AUTH_ROUTE = WEB_DIR / "app" / "api" / "auth" / "[...nextauth]" / "route.ts"
 PKCE_TS = WEB_DIR / "lib" / "pkce.ts"
+LEGACY_AUTH_TS = WEB_DIR / "lib" / "auth.ts"
 NEXT_CONFIG = WEB_DIR / "next.config.ts"
 DOCKER_COMPOSE_PREVIEW = REPO_ROOT / "docker-compose.preview.yml"
 
@@ -30,29 +32,31 @@ class TestFrontendAssets:
         for snippet in required_snippets:
             assert snippet in content, f"Expected {snippet} in web/app/page.tsx"
 
-    def test_next_config_enables_standalone_output(self):
+    def test_next_config_enables_standalone_and_trailing_slash(self):
         assert NEXT_CONFIG.is_file(), f"Missing {NEXT_CONFIG}"
         content = NEXT_CONFIG.read_text(encoding="utf-8")
         assert "output: 'standalone'" in content
         assert "basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? ''" in content
+        assert "trailingSlash: true" in content
 
-    def test_auth_module_contains_pkce_and_oauth_contract(self):
+    def test_auth_js_module_configured_with_keycloak(self):
         assert AUTH_TS.is_file(), f"Missing {AUTH_TS}"
         content = AUTH_TS.read_text(encoding="utf-8")
-        assert "randomString" in content
-        assert "sha256Challenge" in content
-        assert "client_id" in content
-        assert "code_verifier" in content
-        assert "code_challenge" in content
-        assert "sessionStorage.setItem('token'" in content
-        assert "${apiBase}/me" in content
+        assert "NextAuth" in content
+        assert "Keycloak" in content
+        assert "secretshare-api" in content
+        assert "callbacks" in content
+        assert "accessToken" in content
 
-    def test_pkce_module_exposes_random_and_challenge(self):
-        assert PKCE_TS.is_file(), f"Missing {PKCE_TS}"
-        content = PKCE_TS.read_text(encoding="utf-8")
-        assert "export function randomString(length = 64): string" in content
-        assert "window.crypto?.getRandomValues" in content
-        assert "export async function sha256Challenge(verifier: string): Promise<string>" in content
+    def test_auth_route_handler_exists(self):
+        assert AUTH_ROUTE.is_file(), f"Missing {AUTH_ROUTE}"
+        content = AUTH_ROUTE.read_text(encoding="utf-8")
+        assert "handlers" in content
+        assert "export const { GET, POST } = handlers" in content
+
+    def test_legacy_pkce_modules_deleted(self):
+        assert not PKCE_TS.exists(), "Legacy web/lib/pkce.ts should be removed after Auth.js migration"
+        assert not LEGACY_AUTH_TS.exists(), "Legacy web/lib/auth.ts should be removed after Auth.js migration"
 
 
 class TestPreviewSubpathResolutionEdgeCases:
