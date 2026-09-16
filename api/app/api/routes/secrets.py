@@ -1,3 +1,4 @@
+from app.core.rate_limit import RateLimiter
 from app.schemas.secrets import (
     SecretCreateRequest,
     SecretCreateResponse,
@@ -12,6 +13,9 @@ router = APIRouter(
     tags=["Secrets"],
 )
 
+create_rate_limit = RateLimiter(limit=10, window_seconds=60, scope="secrets:create")
+retrieve_rate_limit = RateLimiter(limit=30, window_seconds=60, scope="secrets:retrieve")
+
 
 def get_secret_service(request: Request) -> SecretService:
     store = SecretStore(request.app.state.redis)
@@ -22,6 +26,7 @@ def get_secret_service(request: Request) -> SecretService:
     "",
     response_model=SecretCreateResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(create_rate_limit)],
 )
 async def create_secret(
     payload: SecretCreateRequest,
@@ -34,6 +39,7 @@ async def create_secret(
 @router.get(
     "/{payload_id}",
     response_model=SecretRetrieveResponse,
+    dependencies=[Depends(retrieve_rate_limit)],
 )
 async def retrieve_secret(
     payload_id: str,
