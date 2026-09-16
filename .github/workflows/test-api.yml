@@ -71,7 +71,22 @@ jobs:
 
       - name: Start Docker services
         run: |
-          docker compose up -d --wait db keycloak traefik
+          docker compose up -d --wait db keycloak traefik web api
+
+      - name: Verify path-based routing & health
+        run: |
+          echo "=== Testing Web UI at / ==="
+          curl -s -f -I http://localhost:80/ | grep -q "200 OK"
+          curl -s -f http://localhost:80/app.js | grep -q "secretshare-api"
+
+          echo "=== Testing API at /api ==="
+          curl -s -f http://localhost:80/api/health | grep -q '"status":"ok"'
+          curl -s -f -I http://localhost:80/api/docs | grep -q "200 OK"
+
+          echo "=== Testing Keycloak at /keycloak ==="
+          curl -s -f http://localhost:80/keycloak/realms/secretshare | grep -q '"realm":"secretshare"'
+
+          echo "=== All path routing checks passed! ==="
 
       - name: Run OAuth integration tests
         env:
@@ -91,6 +106,8 @@ jobs:
         run: |
           docker compose logs keycloak
           docker compose logs db
+          docker compose logs api
+          docker compose logs web
 
       - name: Tear down services
         if: always()

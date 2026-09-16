@@ -32,8 +32,8 @@ jobs:
         env:
           PR_NUM: ${{ github.event.number }}
         run: |
-          tailscale ssh root@staging-server << 'EOF'
-            set -euo pipefail
+          tailscale ssh root@staging-server "bash -s" << 'EOF'
+            set -euxo pipefail
             PR_NUM="${{ github.event.number }}"
             REPO_DIR="/opt/secretshare"
             WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
@@ -81,23 +81,52 @@ jobs:
             fi
             PR_SECRET="${PR_SECRET:-$(openssl rand -hex 16)}"
             KC_SECRET="${KC_SECRET:-$(openssl rand -hex 16)}"
+            export PR_NUMBER="${PR_NUM}"
+            export POSTGRES_PASSWORD="${PR_SECRET}"
+            export KEYCLOAK_ADMIN_PASSWORD="${KC_SECRET}"
             printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\n" "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" > .env
 
-            echo "=== Starting database service ==="
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d db
-
-            echo "=== Waiting for database readiness and syncing credentials ==="
-            for i in $(seq 1 30); do
-              if docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db pg_isready -U secretshare -d "secretshare_pr_${PR_NUM}" >/dev/null 2>&1; then
-                break
-              fi
-              sleep 1
-            done
-            # Ensure PostgreSQL user password matches .env even if the persistent volume was initialized earlier with different credentials
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db psql -U secretshare -d postgres -c "ALTER USER secretshare WITH PASSWORD '${PR_SECRET}';"
-
             echo "=== Building & launching isolated stack ==="
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
+            if ! docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans; then
+              echo "=== Initial compose up failed, resetting stale volumes and retrying... ==="
+              docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml down -v --remove-orphans || true
+              docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
+            fi
+
+            echo "=== Verifying preview deployment health & routing ==="
+            ATTEMPTS=0
+            MAX_ATTEMPTS=30
+            until curl -s -f -I -m 5 "http://127.0.0.1/pr-${PR_NUM}" >/dev/null && \
+                  curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/health" >/dev/null && \
+                  curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare" >/dev/null; do
+              ATTEMPTS=$((ATTEMPTS + 1))
+              if [ $ATTEMPTS -ge $MAX_ATTEMPTS ]; then
+                echo "=== Preview verification timed out after ${MAX_ATTEMPTS} attempts! Container status: ==="
+                docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml ps
+                echo "=== Container logs: ==="
+                docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml logs --tail 50
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "=== Testing live secret creation on deployed stack ==="
+            PAYLOAD_ID=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets" \
+              -H "Content-Type: application/json" \
+              -d '{"ciphertext": "e2e-deployment-smoke-test"}' | grep -o '"payload_id":"[^"]*' | cut -d'"' -f4)
+
+            if [ -z "${PAYLOAD_ID}" ]; then
+              echo "Error: Failed to create secret on deployed preview stack"
+              exit 1
+            fi
+
+            RETRIEVED=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${PAYLOAD_ID}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
+            if [ "${RETRIEVED}" != "e2e-deployment-smoke-test" ]; then
+              echo "Error: Retrieved secret does not match expected payload"
+              exit 1
+            fi
+
+            echo "=== Preview deployment and all verification tests passed successfully! ==="
           EOF
 
       - name: Comment Preview URL on PR
