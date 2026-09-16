@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from app.api.routes.secrets import router as secrets_router
 from app.core.auth import get_current_user
 from app.core.config import get_settings
+from app.core.headers import SecurityHeadersMiddleware
+from app.core.limits import BODY_OVERHEAD_BYTES, BodySizeLimitMiddleware
 from app.db.session import create_engine, create_session_factory, dispose_engine
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,6 +60,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Middleware runs in reverse registration order, so the body size limit is
+# added last to make it the outermost layer: an oversized request is rejected
+# before any other middleware or route buffers it.
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    BodySizeLimitMiddleware,
+    max_body_bytes=settings.max_payload_bytes + BODY_OVERHEAD_BYTES,
 )
 
 # Include routers
