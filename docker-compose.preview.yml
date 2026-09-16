@@ -1,13 +1,26 @@
 services:
   web:
-    image: nginx:alpine
-    volumes:
-      - ./web:/usr/share/nginx/html:ro
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BASE_PATH: "/pr-${PR_NUMBER}"
+        NEXT_PUBLIC_API_BASE: "/pr-${PR_NUMBER}/api"
+    environment:
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_TRUST_HOST=true
+      - AUTH_KEYCLOAK_ID=secretshare-api
+      - AUTH_KEYCLOAK_SECRET=
+      - AUTH_KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
+      - KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
+      - KEYCLOAK_CLIENT_ID=secretshare-api
+    extra_hosts:
+      - "staging-server:host-gateway"
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 64M
+          cpus: "0.50"
+          memory: 256M
     labels:
       - "traefik.enable=true"
       # Redirect /pr-N to /pr-N/
@@ -25,9 +38,14 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
-      - "traefik.http.routers.pr-${PR_NUMBER}-web.middlewares=pr-${PR_NUMBER}-web-strip"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-web-strip.stripprefix.prefixes=/pr-${PR_NUMBER}"
-      - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=80"
+
+      # NextAuth router: route /pr-N/api/auth to web instead of api (priority 150 > api 100)
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=PathPrefix(`/pr-${PR_NUMBER}/api/auth`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.entrypoints=web"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.priority=150"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.service=pr-${PR_NUMBER}-web"
+
+      - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default
       - traefik-net

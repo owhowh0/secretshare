@@ -1,8 +1,48 @@
+# Environment and Local Secrets
 .env
-CLAUDE.md
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+env/
+
+# Node / Next.js / Bun
 node_modules/
 .next/
-*.pem
+out/
+build/
+dist/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Operating System & Editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Misc
+CLAUDE.md
 *.docx
-.venv

@@ -76,8 +76,11 @@ jobs:
       - name: Verify path-based routing & health
         run: |
           echo "=== Testing Web UI at / ==="
-          curl -s -f -I http://localhost:80/ | grep -q "200 OK"
-          curl -s -f http://localhost:80/app.js | grep -q "secretshare-api"
+          HTML_OUTPUT=$(curl -s -f -m 5 http://localhost:80/)
+          echo "$HTML_OUTPUT" | grep -q "SecretShare"
+          NEXT_ASSET_PATH=$(echo "$HTML_OUTPUT" | grep -oE '/_next/static/[^"]+\.js' | head -n1)
+          [ -n "$NEXT_ASSET_PATH" ] || { echo "Missing Next.js static asset reference in HTML"; exit 1; }
+          curl -s -f -m 5 "http://localhost:80${NEXT_ASSET_PATH}" >/dev/null
 
           echo "=== Testing API at /api ==="
           curl -s -f http://localhost:80/api/health | grep -q '"status":"ok"'
