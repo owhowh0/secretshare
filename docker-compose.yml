@@ -25,7 +25,11 @@ services:
     environment:
       - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
       - AUTH_TRUST_HOST=true
+      - AUTH_URL=http://localhost/api/auth
       - NEXTAUTH_URL=http://localhost/api/auth
+      - AUTH_KEYCLOAK_ID=secretshare-api
+      - AUTH_KEYCLOAK_SECRET=
+      - AUTH_KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
       - KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
       - KEYCLOAK_CLIENT_ID=secretshare-api
     extra_hosts:
@@ -40,6 +44,13 @@ services:
       - "traefik.http.routers.web.rule=PathPrefix(`/`)"
       - "traefik.http.routers.web.entrypoints=web"
       - "traefik.http.routers.web.priority=10"
+
+      # NextAuth router: route /api/auth to web instead of api (priority 150 > api 100)
+      - "traefik.http.routers.web-auth.rule=PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.web-auth.entrypoints=web"
+      - "traefik.http.routers.web-auth.priority=150"
+      - "traefik.http.routers.web-auth.service=web"
+
       - "traefik.http.services.web.loadbalancer.server.port=3000"
     networks:
       - traefik-net

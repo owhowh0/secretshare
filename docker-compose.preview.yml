@@ -9,7 +9,11 @@ services:
     environment:
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_TRUST_HOST=true
+      - AUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
       - NEXTAUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
+      - AUTH_KEYCLOAK_ID=secretshare-api
+      - AUTH_KEYCLOAK_SECRET=
+      - AUTH_KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
       - KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
       - KEYCLOAK_CLIENT_ID=secretshare-api
     extra_hosts:
@@ -36,6 +40,13 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
+
+      # NextAuth router: route /pr-N/api/auth to web instead of api (priority 150 > api 100)
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=PathPrefix(`/pr-${PR_NUMBER}/api/auth`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.entrypoints=web"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.priority=150"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.service=pr-${PR_NUMBER}-web"
+
       - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default

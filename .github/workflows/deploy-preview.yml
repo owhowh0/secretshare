@@ -161,6 +161,18 @@ jobs:
               exit 1
             }
 
+            echo "=== 2b. Testing NextAuth Providers Endpoint ==="
+            AUTH_PROVIDERS=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/auth/providers" || {
+              echo "Error: NextAuth /api/auth/providers failed"
+              curl -v -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/auth/providers" || true
+              exit 1
+            })
+            echo "$AUTH_PROVIDERS" | grep -q 'keycloak' || {
+              echo "Error: Keycloak provider not found in /api/auth/providers: $AUTH_PROVIDERS"
+              exit 1
+            }
+            echo "-> NextAuth keycloak provider endpoint verified"
+
             echo "=== 3. Testing API Swagger Docs & OpenAPI Schema ==="
             curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/docs" >/dev/null || {
               echo "Error: /api/docs failed"
