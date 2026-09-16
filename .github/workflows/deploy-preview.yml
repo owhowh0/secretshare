@@ -121,10 +121,9 @@ jobs:
             HTML_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/")
             echo "$HTML_OUTPUT" | grep -q 'id="login-btn"' || { echo "Error: login-btn missing in HTML"; exit 1; }
             echo "$HTML_OUTPUT" | grep -q 'id="create-btn"' || { echo "Error: create-btn missing in HTML"; exit 1; }
-
-            JS_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/app.js")
-            echo "$JS_OUTPUT" | grep -q 'secretshare-api' || { echo "Error: app.js content invalid"; exit 1; }
-            echo "$JS_OUTPUT" | grep -q 'sessionStorage' || { echo "Error: app.js missing session logic"; exit 1; }
+            NEXT_ASSET_PATH=$(echo "$HTML_OUTPUT" | grep -oE "/pr-${PR_NUM}/_next/static/[^\"]+\\.js" | head -n1)
+            [ -n "$NEXT_ASSET_PATH" ] || { echo "Error: Next.js static asset reference missing in HTML"; exit 1; }
+            curl -s -f -m 5 "http://127.0.0.1${NEXT_ASSET_PATH}" >/dev/null || { echo "Error: Failed to fetch Next.js static asset"; exit 1; }
 
             echo "=== 3. Testing API Swagger Docs & OpenAPI Schema ==="
             curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/docs" >/dev/null || { echo "Error: /api/docs failed"; exit 1; }

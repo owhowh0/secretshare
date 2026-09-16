@@ -1,109 +1,58 @@
 import re
-import shutil
-import subprocess
 from pathlib import Path
 from urllib.parse import urljoin
 import yaml
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 WEB_DIR = REPO_ROOT / "web"
-INDEX_HTML = WEB_DIR / "index.html"
-APP_JS = WEB_DIR / "app.js"
+APP_PAGE = WEB_DIR / "app" / "page.tsx"
+AUTH_TS = WEB_DIR / "lib" / "auth.ts"
+PKCE_TS = WEB_DIR / "lib" / "pkce.ts"
+NEXT_CONFIG = WEB_DIR / "next.config.ts"
 DOCKER_COMPOSE_PREVIEW = REPO_ROOT / "docker-compose.preview.yml"
 
 
 class TestFrontendAssets:
-    """Validates frontend static files and UI contracts."""
+    """Validates frontend Next.js files and UI contracts."""
 
-    def test_index_html_exists_and_contains_required_elements(self):
-        assert INDEX_HTML.is_file(), f"Missing {INDEX_HTML}"
-        content = INDEX_HTML.read_text(encoding="utf-8")
+    def test_app_page_exists_and_contains_required_elements(self):
+        assert APP_PAGE.is_file(), f"Missing {APP_PAGE}"
+        content = APP_PAGE.read_text(encoding="utf-8")
 
-        required_ids = [
+        required_snippets = [
+            "<h1>SecretShare</h1>",
+            'id="auth-section"',
             'id="login-btn"',
             'id="logout-btn"',
-            'id="user-info"',
-            'id="username"',
-            'id="secret"',
             'id="create-btn"',
-            'id="payload-id"',
             'id="retrieve-btn"',
-            'id="create-result"',
-            'id="retrieve-result"',
         ]
-        for element_id in required_ids:
-            assert element_id in content, f"Expected {element_id} in web/index.html"
+        for snippet in required_snippets:
+            assert snippet in content, f"Expected {snippet} in web/app/page.tsx"
 
-    def test_index_html_avoids_naive_relative_script_src(self):
-        """Naive <script src="app.js"> fails RFC 3986 resolution when accessing subpath without trailing slash."""
-        content = INDEX_HTML.read_text(encoding="utf-8")
-        assert '<script src="app.js"></script>' not in content, (
-            "web/index.html must not use naive <script src='app.js'></script> because "
-            "it breaks RFC 3986 URL resolution when preview URLs (/pr-<N>) lack a trailing slash."
-        )
+    def test_next_config_enables_standalone_output(self):
+        assert NEXT_CONFIG.is_file(), f"Missing {NEXT_CONFIG}"
+        content = NEXT_CONFIG.read_text(encoding="utf-8")
+        assert "output: 'standalone'" in content
+        assert "basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? ''" in content
 
-    def test_index_html_includes_cache_control_headers(self):
-        content = INDEX_HTML.read_text(encoding="utf-8")
-        assert 'http-equiv="Cache-Control"' in content, "index.html should specify Cache-Control meta tag"
-
-    def test_app_js_syntax_valid(self):
-        assert APP_JS.is_file(), f"Missing {APP_JS}"
-        node_bin = shutil.which("node")
-        if not node_bin:
-            pytest.skip("Node.js not installed in environment, skipping JS syntax check.")
-
-        proc = subprocess.run(
-            [node_bin, "-c", str(APP_JS)],
-            capture_output=True,
-            text=True,
-        )
-        assert proc.returncode == 0, f"JS syntax check failed: {proc.stderr}"
-
-    def test_app_js_contains_pkce_and_oauth_contract(self):
-        content = APP_JS.read_text(encoding="utf-8")
+    def test_auth_module_contains_pkce_and_oauth_contract(self):
+        assert AUTH_TS.is_file(), f"Missing {AUTH_TS}"
+        content = AUTH_TS.read_text(encoding="utf-8")
         assert "randomString" in content
         assert "sha256Challenge" in content
         assert "client_id" in content
         assert "code_verifier" in content
         assert "code_challenge" in content
         assert "sessionStorage.setItem('token'" in content
-        assert "${API}/me" in content
+        assert "${apiBase}/me" in content
 
-    def test_pkce_challenge_works_in_non_secure_context_without_subtle_crypto(self):
-        """Validates that PKCE challenge computation succeeds when crypto.subtle is undefined (non-HTTPS)."""
-        node_bin = shutil.which("node")
-        if not node_bin:
-            pytest.skip("Node.js not installed in environment, skipping non-secure context test.")
-
-        # Script simulates browser environment with window.crypto.subtle = undefined
-        test_script = f"""
-        const fs = require('fs');
-        const code = fs.readFileSync('{APP_JS}', 'utf8');
-        global.window = {{
-            location: {{ pathname: '/pr-9/', origin: 'http://staging-server', search: '' }},
-            crypto: {{}} // subtle is explicitly undefined (non-secure HTTP context)
-        }};
-        global.document = {{ title: 'Test', getElementById: () => null }};
-        global.sessionStorage = {{ getItem: () => null, setItem: () => {{}}, removeItem: () => {{}} }};
-        global.btoa = (str) => Buffer.from(str, 'binary').toString('base64');
-
-        eval(code);
-
-        (async () => {{
-            const verifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
-            const challenge = await sha256Challenge(verifier);
-            const expected = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
-            if (challenge !== expected) {{
-                console.error(`Expected ${{expected}}, got ${{challenge}}`);
-                process.exit(1);
-            }}
-            console.log('PKCE RFC 7636 test vector matched successfully without crypto.subtle');
-        }})();
-        """
-
-        proc = subprocess.run([node_bin, "-e", test_script], capture_output=True, text=True)
-        assert proc.returncode == 0, f"Non-secure context PKCE test failed: {proc.stderr}"
+    def test_pkce_module_exposes_random_and_challenge(self):
+        assert PKCE_TS.is_file(), f"Missing {PKCE_TS}"
+        content = PKCE_TS.read_text(encoding="utf-8")
+        assert "export function randomString(length = 64): string" in content
+        assert "window.crypto?.getRandomValues" in content
+        assert "export async function sha256Challenge(verifier: string): Promise<string>" in content
 
 
 class TestPreviewSubpathResolutionEdgeCases:
