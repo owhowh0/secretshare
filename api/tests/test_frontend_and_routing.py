@@ -85,6 +85,7 @@ class TestFrontendAssets:
             crypto: {{}} // subtle is explicitly undefined (non-secure HTTP context)
         }};
         global.document = {{ title: 'Test', getElementById: () => null }};
+        global.sessionStorage = {{ getItem: () => null, setItem: () => {{}}, removeItem: () => {{}} }};
         global.btoa = (str) => Buffer.from(str, 'binary').toString('base64');
 
         eval(code);
