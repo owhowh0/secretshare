@@ -1,3 +1,4 @@
+from app.core.audit import AuditService
 from app.schemas.secrets import (
     SecretCreateRequest,
     SecretCreateResponse,
@@ -18,16 +19,34 @@ def get_secret_service(request: Request) -> SecretService:
     return SecretService(store)
 
 
+def get_audit_service(request: Request) -> AuditService:
+    return AuditService(getattr(request.app.state, "db_session_factory", None))
+
+
+def _client_ip(request: Request) -> str | None:
+    return request.client.host if request.client else None
+
+
 @router.post(
     "",
     response_model=SecretCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_secret(
+    request: Request,
     payload: SecretCreateRequest,
     service: SecretService = Depends(get_secret_service),
+    audit: AuditService = Depends(get_audit_service),
 ) -> SecretCreateResponse:
     payload_id = await service.create_secret(payload.ciphertext)
+
+    await audit.record(
+        "created",
+        payload_id=payload_id,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+
     return SecretCreateResponse(payload_id=payload_id)
 
 
@@ -36,10 +55,19 @@ async def create_secret(
     response_model=SecretRetrieveResponse,
 )
 async def retrieve_secret(
+    request: Request,
     payload_id: str,
     service: SecretService = Depends(get_secret_service),
+    audit: AuditService = Depends(get_audit_service),
 ) -> SecretRetrieveResponse:
     ciphertext = await service.retrieve_secret(payload_id)
+
+    await audit.record(
+        "revealed" if ciphertext is not None else "denied",
+        payload_id=payload_id,
+        ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
 
     if ciphertext is None:
         raise HTTPException(

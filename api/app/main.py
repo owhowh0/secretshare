@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from app.api.routes.secrets import router as secrets_router
 from app.core.auth import get_current_user
 from app.core.config import get_settings
+from app.db.session import create_engine, create_session_factory, dispose_engine
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from redis.asyncio import Redis
@@ -17,15 +18,28 @@ root_path = f"/pr-{os.environ['PR_NUMBER']}" if os.getenv("PR_NUMBER") else ""
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+
     redis = Redis.from_url(
-        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        os.getenv("REDIS_URL", settings.redis_url),
         decode_responses=True,
     )
     app.state.redis = redis
+
+    database_url = os.getenv("DATABASE_URL", settings.database_url)
+    engine = create_engine(database_url) if database_url else None
+    app.state.db_engine = engine
+    app.state.db_session_factory = create_session_factory(engine) if engine else None
+
+    if engine is None:
+        logger.warning("DATABASE_URL is not set — audit logging is disabled.")
+
     try:
         yield
     finally:
         await redis.aclose()
+        if engine is not None:
+            await dispose_engine(engine)
 
 
 app = FastAPI(
