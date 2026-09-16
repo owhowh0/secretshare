@@ -25,7 +25,7 @@ fi
 TRAEFIK_PORT="${TRAEFIK_WEB_PORT:-80}"
 
 # If KEYCLOAK_URL uses docker-internal hostname (e.g. http://keycloak:8080/...), map to localhost via Traefik
-if [[ "${KEYCLOAK_URL:-}" =~ ://keycloak(:[0-9]+)? ]]; then
+if [[ "${KEYCLOAK_URL:-}" =~ ://keycloak(:[0-9]+)?(/|$) ]]; then
   export KEYCLOAK_URL="http://127.0.0.1:${TRAEFIK_PORT}${KEYCLOAK_PATH:-/keycloak}"
 else
   export KEYCLOAK_URL="${KEYCLOAK_URL:-http://127.0.0.1:${TRAEFIK_PORT}/keycloak}"
