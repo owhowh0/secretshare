@@ -1,3 +1,5 @@
+import logging
+
 import jwt
 from jwt import PyJWKClient, PyJWTError
 from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError, PyJWKSetError
@@ -6,7 +8,15 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .config import Settings, get_settings
 
+logger = logging.getLogger("secretshare.auth")
+
 _bearer = HTTPBearer()
+
+# Every rejected token gets this one message. Naming the reason — an unknown
+# signing key, a bad audience, an expired token — tells an attacker probing for
+# a forgery which part of their token to fix next, so the reason is logged
+# server-side and never returned (brief §2).
+_INVALID_TOKEN_DETAIL = "Invalid or expired token"
 
 _jwks_clients: dict[str, PyJWKClient] = {}
 
@@ -53,18 +63,25 @@ async def get_current_user(
             detail="Authentication service unavailable.",
         ) from exc
     except (PyJWKClientError, PyJWKSetError) as exc:
+        # The token itself is never logged: it is a bearer credential, and
+        # invariant 6 keeps credentials out of the logs.
+        logger.warning("Token rejected: signing key lookup failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Token signing key not found: {exc}",
+            detail=_INVALID_TOKEN_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except PyJWTError as exc:
+        logger.warning("Token rejected: %s: %s", type(exc).__name__, exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {exc}",
+            detail=_INVALID_TOKEN_DETAIL,
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except Exception as exc:
+        # Unexpected failures were previously silent; without this the cause of a
+        # 503 is unrecoverable after the fact.
+        logger.exception("Unexpected error during token validation: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service unavailable.",
