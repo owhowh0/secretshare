@@ -4,13 +4,13 @@ services:
       context: ./api
       dockerfile: Dockerfile
     environment:
-      - POSTGRES_USER=secretshare
+      - POSTGRES_USER=${POSTGRES_USER:-secretshare}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=secretshare_pr_${PR_NUMBER}
-      - DATABASE_URL=postgresql+asyncpg://secretshare:${POSTGRES_PASSWORD}@db:5432/secretshare_pr_${PR_NUMBER}
-      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_DB=${POSTGRES_DB:-secretshare_pr_${PR_NUMBER}}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-secretshare_pr_${PR_NUMBER}}
+      - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:${REDIS_PORT:-6379}/0}
       - PR_NUMBER=${PR_NUMBER}
-      - KEYCLOAK_URL=http://keycloak:8080/pr-${PR_NUMBER}/keycloak
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/pr-${PR_NUMBER}/keycloak}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
     deploy:
@@ -37,9 +37,10 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: secretshare
+      POSTGRES_USER: ${POSTGRES_USER:-secretshare}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: secretshare_pr_${PR_NUMBER}
+      POSTGRES_DB: ${POSTGRES_DB:-secretshare_pr_${PR_NUMBER}}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER}}
     deploy:
       resources:
         limits:
@@ -47,8 +48,9 @@ services:
           memory: 256M
     volumes:
       - pr-pgdata:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U secretshare -d secretshare_pr_${PR_NUMBER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-secretshare} -d ${POSTGRES_DB:-secretshare_pr_${PR_NUMBER}}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -73,14 +75,23 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    command: start-dev
+    command: start-dev --import-realm
     environment:
-      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
-      KC_HTTP_RELATIVE_PATH: /pr-${PR_NUMBER}/keycloak
+      KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/pr-${PR_NUMBER}/keycloak}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:${POSTGRES_PORT:-5432}/${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER}}
+      KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
       interval: 10s
@@ -89,7 +100,7 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=PathPrefix(`/pr-${PR_NUMBER}/keycloak`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=PathPrefix(`${KEYCLOAK_PATH:-/pr-${PR_NUMBER}/keycloak}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.priority=200"
       - "traefik.http.services.pr-${PR_NUMBER}-keycloak.loadbalancer.server.port=8080"
