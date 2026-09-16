@@ -1,4 +1,5 @@
 from app.core.audit import AuditService
+from app.core.config import Settings, get_settings
 from app.schemas.secrets import (
     SecretCreateRequest,
     SecretCreateResponse,
@@ -19,8 +20,14 @@ def get_secret_service(request: Request) -> SecretService:
     return SecretService(store)
 
 
-def get_audit_service(request: Request) -> AuditService:
-    return AuditService(getattr(request.app.state, "db_session_factory", None))
+def get_audit_service(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+) -> AuditService:
+    return AuditService(
+        getattr(request.app.state, "db_session_factory", None),
+        enabled=settings.audit_enabled,
+    )
 
 
 def _client_ip(request: Request) -> str | None:
