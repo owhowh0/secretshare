@@ -93,3 +93,31 @@ class TestErrorHandling:
                 assert "password leaked" not in r.text
         finally:
             app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+class TestCORS:
+    async def test_cors_headers_present_for_allowed_origin(self, client):
+        origin = "http://localhost:3000"
+        r = await client.get("/health", headers={"Origin": origin})
+
+        assert r.status_code == 200
+        assert r.headers.get("access-control-allow-origin") == origin
+        assert r.headers.get("access-control-allow-credentials") == "true"
+
+    async def test_cors_preflight_options(self, client):
+        origin = "http://localhost:3000"
+        r = await client.options(
+            "/secrets",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.headers.get("access-control-allow-origin") == origin
+        assert "POST" in r.headers.get("access-control-allow-methods", "")
