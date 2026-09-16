@@ -23,9 +23,16 @@
       max-width: 560px;
       display: flex;
       flex-direction: column;
-      gap: 2rem;
+      gap: 1.5rem;
     }
 
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 700; }
     h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; }
 
     section {
@@ -89,6 +96,19 @@
 <body>
 <main>
 
+  <header>
+    <h1>SecretShare</h1>
+    <div id="auth-section">
+      <button id="login-btn">Login with Keycloak</button>
+      <div id="user-info" style="display: none; align-items: center; gap: 0.75rem;">
+        <span id="username" class="muted"></span>
+        <button id="logout-btn" style="background: #333; font-size: 0.85rem; padding: 0.4rem 0.8rem;">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <hr>
+
   <section>
     <h2>Create secret</h2>
     <textarea id="secret" rows="5" placeholder="Type your secret here…"></textarea>
@@ -103,74 +123,11 @@
     <h2>Retrieve secret</h2>
     <input type="text" id="payload-id" placeholder="Payload ID">
     <button id="retrieve-btn">Retrieve</button>
-    <pre id="retrieve-result" hidden></pre></pre>
+    <pre id="retrieve-result" hidden></pre>
     <p id="retrieve-error" hidden class="error"></p>
   </section>
 
 </main>
-<script>
-  const API = 'http://api.localhost';
-
-  function escapeHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  document.getElementById('create-btn').addEventListener('click', async () => {
-    const secret = document.getElementById('secret').value.trim();
-    if (!secret) return;
-
-    const btn = document.getElementById('create-btn');
-    const result = document.getElementById('create-result');
-    const error = document.getElementById('create-error');
-    btn.disabled = true;
-    result.hidden = true;
-    error.hidden = true;
-
-    try {
-      const res = await fetch(`${API}/secrets`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ciphertext: secret }),
-      });
-      if (!res.ok) throw new Error(`API returned ${res.status}`);
-
-      const { payload_id } = await res.json();
-      result.textContent = payload_id;
-      result.hidden = false;
-    } catch (e) {
-      error.textContent = e.message;
-      error.hidden = false;
-    } finally {
-      btn.disabled = false;
-    }
-  });
-
-  document.getElementById('retrieve-btn').addEventListener('click', async () => {
-    const id = document.getElementById('payload-id').value.trim();
-    if (!id) return;
-
-    const btn = document.getElementById('retrieve-btn');
-    const result = document.getElementById('retrieve-result');
-    const error = document.getElementById('retrieve-error');
-    btn.disabled = true;
-    result.hidden = true;
-    error.hidden = true;
-
-    try {
-      const res = await fetch(`${API}/secrets/${id}`);
-      if (res.status === 404) throw new Error('Secret not found.');
-      if (!res.ok) throw new Error(`API returned ${res.status}`);
-
-      const { ciphertext } = await res.json();
-      result.innerHTML = escapeHtml(ciphertext);
-      result.hidden = false;
-    } catch (e) {
-      error.textContent = e.message;
-      error.hidden = false;
-    } finally {
-      btn.disabled = false;
-    }
-  });
-</script>
+<script src="app.js"></script>
 </body>
 </html>

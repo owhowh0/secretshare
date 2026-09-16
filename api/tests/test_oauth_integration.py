@@ -41,8 +41,9 @@ async def check_keycloak():
 @pytest_asyncio.fixture
 async def api_client():
     if API_BASE_URL:
-        host = os.getenv("API_HOST", "api.localhost")
-        headers = {"Host": host}
+        headers = {}
+        if os.getenv("API_HOST"):
+            headers["Host"] = os.getenv("API_HOST")
         async with httpx.AsyncClient(base_url=API_BASE_URL, headers=headers, timeout=10) as client:
             yield client
     else:

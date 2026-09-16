@@ -12,7 +12,8 @@ from starlette.responses import JSONResponse
 
 logger = logging.getLogger("secretshare.api")
 
-root_path = f"/pr-{os.environ['PR_NUMBER']}" if os.getenv("PR_NUMBER") else ""
+default_root = f"/pr-{os.environ['PR_NUMBER']}/api" if os.getenv("PR_NUMBER") else "/api"
+root_path = os.getenv("API_ROOT_PATH", default_root)
 
 
 @asynccontextmanager

@@ -105,15 +105,17 @@ jobs:
         with:
           script: |
             const prNumber = context.issue.number;
-            const previewUrl = `http://staging-server/pr-${prNumber}/docs`;
-            const healthUrl = `http://staging-server/pr-${prNumber}/health`;
+            const webUrl = `http://staging-server/pr-${prNumber}`;
+            const apiDocsUrl = `http://staging-server/pr-${prNumber}/api/docs`;
+            const healthUrl = `http://staging-server/pr-${prNumber}/api/health`;
             const keycloakUrl = `http://staging-server/pr-${prNumber}/keycloak`;
             const commentIdentifier = "<!-- preview-deployment-comment -->";
             const body = [
               commentIdentifier,
               "### 🚀 Preview Environment Ready",
               "",
-              `- **API Docs / Swagger**: [${previewUrl}](${previewUrl})`,
+              `- **Web App**: [${webUrl}](${webUrl})`,
+              `- **API Docs / Swagger**: [${apiDocsUrl}](${apiDocsUrl})`,
               `- **Health Check**: \`${healthUrl}\``,
               `- **Keycloak Admin Console**: [${keycloakUrl}](${keycloakUrl}) — user: \`admin\``,
               `- **OAuth Test User**: \`testuser\` / \`testpassword123\` (Realm: \`secretshare\`, Client: \`secretshare-api\`)`,

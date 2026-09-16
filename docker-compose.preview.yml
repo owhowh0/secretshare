@@ -1,4 +1,25 @@
 services:
+  web:
+    image: nginx:alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=PathPrefix(`/pr-${PR_NUMBER}`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.middlewares=pr-${PR_NUMBER}-web-strip"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-web-strip.stripprefix.prefixes=/pr-${PR_NUMBER}"
+      - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=80"
+    networks:
+      - default
+      - traefik-net
+
   api:
     build:
       context: ./api
@@ -13,6 +34,7 @@ services:
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/pr-${PR_NUMBER}/keycloak}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
+      - API_ROOT_PATH=/pr-${PR_NUMBER}/api
     deploy:
       resources:
         limits:
@@ -25,10 +47,11 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=PathPrefix(`/pr-${PR_NUMBER}`) || Host(`pr-${PR_NUMBER}.api.staging-server`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=PathPrefix(`/pr-${PR_NUMBER}/api`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-strip"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-strip.stripprefix.prefixes=/pr-${PR_NUMBER}"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.priority=100"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-api-strip"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-api-strip.stripprefix.prefixes=/pr-${PR_NUMBER}/api"
       - "traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=8000"
     networks:
       - default
