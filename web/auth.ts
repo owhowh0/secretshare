@@ -1,6 +1,8 @@
 import NextAuth from "next-auth"
 import Keycloak from "next-auth/providers/keycloak"
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Keycloak({
@@ -14,7 +16,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         "",
       issuer:
         process.env.AUTH_KEYCLOAK_ISSUER ??
-        process.env.KEYCLOAK_ISSUER,
+        process.env.KEYCLOAK_ISSUER ??
+        `http://localhost${BASE_PATH}/keycloak/realms/secretshare`,
     }),
   ],
   callbacks: {

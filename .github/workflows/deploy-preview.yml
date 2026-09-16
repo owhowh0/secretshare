@@ -162,9 +162,9 @@ jobs:
             }
 
             echo "=== 2b. Testing NextAuth Providers Endpoint ==="
-            AUTH_PROVIDERS=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/auth/providers" || {
+            AUTH_PROVIDERS=$(curl -s -f -L -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/auth/providers" || {
               echo "Error: NextAuth /api/auth/providers failed"
-              curl -v -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/auth/providers" || true
+              curl -v -L -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/auth/providers" || true
               exit 1
             })
             echo "$AUTH_PROVIDERS" | grep -q 'keycloak' || {

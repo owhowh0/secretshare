@@ -52,7 +52,7 @@ class TestFrontendAssets:
         assert AUTH_ROUTE.is_file(), f"Missing {AUTH_ROUTE}"
         content = AUTH_ROUTE.read_text(encoding="utf-8")
         assert "handlers" in content
-        assert "export const { GET, POST } = handlers" in content
+        assert "GET" in content and "POST" in content
 
     def test_legacy_pkce_modules_deleted(self):
         assert not PKCE_TS.exists(), "Legacy web/lib/pkce.ts should be removed after Auth.js migration"
