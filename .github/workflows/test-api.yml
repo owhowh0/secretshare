@@ -96,6 +96,7 @@ jobs:
           TEST_USER_USERNAME: testuser
           TEST_USER_PASSWORD: testpassword123
           TEST_USER_EMAIL: test@example.com
+          API_BASE_URL: http://localhost:80/api
           REQUIRE_KEYCLOAK: "1"
         working-directory: api
         run: |

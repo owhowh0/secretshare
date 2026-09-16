@@ -96,7 +96,7 @@ jobs:
             echo "=== Verifying preview deployment health & routing ==="
             ATTEMPTS=0
             MAX_ATTEMPTS=30
-            until curl -s -f -I -m 5 "http://127.0.0.1/pr-${PR_NUM}" >/dev/null && \
+            until curl -s -f -L -m 5 "http://127.0.0.1/pr-${PR_NUM}/" >/dev/null && \
                   curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/health" >/dev/null && \
                   curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare" >/dev/null; do
               ATTEMPTS=$((ATTEMPTS + 1))
@@ -110,21 +110,89 @@ jobs:
               sleep 2
             done
 
-            echo "=== Testing live secret creation on deployed stack ==="
+            echo "=== 1. Testing trailing-slash redirect on /pr-${PR_NUM} ==="
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}")
+            if [ "$HTTP_CODE" != "301" ] && [ "$HTTP_CODE" != "308" ] && [ "$HTTP_CODE" != "200" ]; then
+              echo "Error: Unexpected HTTP code $HTTP_CODE for /pr-${PR_NUM}"
+              exit 1
+            fi
+
+            echo "=== 2. Testing Frontend HTML & Assets ==="
+            HTML_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/")
+            echo "$HTML_OUTPUT" | grep -q 'id="login-btn"' || { echo "Error: login-btn missing in HTML"; exit 1; }
+            echo "$HTML_OUTPUT" | grep -q 'id="create-btn"' || { echo "Error: create-btn missing in HTML"; exit 1; }
+
+            JS_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/app.js")
+            echo "$JS_OUTPUT" | grep -q 'secretshare-api' || { echo "Error: app.js content invalid"; exit 1; }
+            echo "$JS_OUTPUT" | grep -q 'sessionStorage' || { echo "Error: app.js missing session logic"; exit 1; }
+
+            echo "=== 3. Testing API Swagger Docs & OpenAPI Schema ==="
+            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/docs" >/dev/null || { echo "Error: /api/docs failed"; exit 1; }
+            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/api/openapi.json" | grep -q '"/health"' || { echo "Error: /api/openapi.json invalid"; exit 1; }
+
+            echo "=== 4. Testing Keycloak OIDC Discovery & Token Issuance ==="
+            curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare/.well-known/openid-configuration" | grep -q 'token_endpoint' || { echo "Error: OIDC discovery failed"; exit 1; }
+
+            KC_TOKEN_RESPONSE=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/keycloak/realms/secretshare/protocol/openid-connect/token" \
+              -H "Content-Type: application/x-www-form-urlencoded" \
+              -d "client_id=secretshare-api&grant_type=password&username=testuser&password=testpassword123&scope=openid")
+
+            ACCESS_TOKEN=$(echo "$KC_TOKEN_RESPONSE" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+            if [ -z "$ACCESS_TOKEN" ]; then
+              echo "Error: Failed to obtain access_token from Keycloak: $KC_TOKEN_RESPONSE"
+              exit 1
+            fi
+
+            echo "=== 5. Testing Protected /api/me Endpoint with Token ==="
+            ME_RESPONSE=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/me" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}")
+            echo "$ME_RESPONSE" | grep -q '"preferred_username":"testuser"' || { echo "Error: /api/me returned unexpected user: $ME_RESPONSE"; exit 1; }
+
+            CODE_NO_AUTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/me")
+            [ "$CODE_NO_AUTH" = "403" ] || { echo "Error: Expected 403 for unauthenticated /api/me, got $CODE_NO_AUTH"; exit 1; }
+
+            CODE_BAD_AUTH=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer invalid.token" "http://127.0.0.1/pr-${PR_NUM}/api/me")
+            [ "$CODE_BAD_AUTH" = "401" ] || { echo "Error: Expected 401 for invalid token on /api/me, got $CODE_BAD_AUTH"; exit 1; }
+
+            echo "=== 6. Testing Authenticated Secret Lifecycle ==="
+            AUTH_PAYLOAD_ID=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              -d '{"ciphertext": "authenticated-e2e-smoke-test"}' | grep -o '"payload_id":"[^"]*' | cut -d'"' -f4)
+
+            if [ -z "${AUTH_PAYLOAD_ID}" ]; then
+              echo "Error: Failed to create authenticated secret on deployed preview stack"
+              exit 1
+            fi
+
+            AUTH_RETRIEVED=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${AUTH_PAYLOAD_ID}" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
+            if [ "${AUTH_RETRIEVED}" != "authenticated-e2e-smoke-test" ]; then
+              echo "Error: Retrieved authenticated secret does not match expected payload"
+              exit 1
+            fi
+
+            AUTH_BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${AUTH_PAYLOAD_ID}")
+            [ "$AUTH_BURN_CODE" = "404" ] || { echo "Error: Expected 404 on second retrieval (burn), got $AUTH_BURN_CODE"; exit 1; }
+
+            echo "=== 7. Testing Anonymous Secret Lifecycle ==="
             PAYLOAD_ID=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets" \
               -H "Content-Type: application/json" \
-              -d '{"ciphertext": "e2e-deployment-smoke-test"}' | grep -o '"payload_id":"[^"]*' | cut -d'"' -f4)
+              -d '{"ciphertext": "anonymous-e2e-smoke-test"}' | grep -o '"payload_id":"[^"]*' | cut -d'"' -f4)
 
             if [ -z "${PAYLOAD_ID}" ]; then
-              echo "Error: Failed to create secret on deployed preview stack"
+              echo "Error: Failed to create anonymous secret on deployed preview stack"
               exit 1
             fi
 
             RETRIEVED=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${PAYLOAD_ID}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
-            if [ "${RETRIEVED}" != "e2e-deployment-smoke-test" ]; then
+            if [ "${RETRIEVED}" != "anonymous-e2e-smoke-test" ]; then
               echo "Error: Retrieved secret does not match expected payload"
               exit 1
             fi
+
+            BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${PAYLOAD_ID}")
+            [ "$BURN_CODE" = "404" ] || { echo "Error: Expected 404 on second retrieval (burn), got $BURN_CODE"; exit 1; }
 
             echo "=== Preview deployment and all verification tests passed successfully! ==="
           EOF

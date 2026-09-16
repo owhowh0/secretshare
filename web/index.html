@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SecretShare</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <script>
+    // Normalize path to have trailing slash on /pr-<N> so relative paths work cleanly
+    if (window.location.pathname.match(/^\/pr-\d+$/)) {
+      window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
+    }
+  </script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -128,6 +137,19 @@
   </section>
 
 </main>
-<script src="app.js"></script>
+<script>
+  (function() {
+    const match = window.location.pathname.match(/^(\/pr-\d+)/);
+    const basePath = match ? match[1] : '';
+    const scriptPath = basePath + '/app.js';
+    const s = document.createElement('script');
+    s.src = scriptPath;
+    s.defer = true;
+    s.onerror = function() {
+      console.error('Failed to load application script from ' + scriptPath);
+    };
+    document.body.appendChild(s);
+  })();
+</script>
 </body>
 </html>

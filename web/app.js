@@ -36,22 +36,30 @@ async function sha256Challenge(verifier) {
 }
 
 async function login() {
-  const verifier = randomString();
-  sessionStorage.setItem('verifier', verifier);
-  const challenge = await sha256Challenge(verifier);
+  console.log('Initiating Keycloak OAuth login...');
+  try {
+    const verifier = randomString();
+    sessionStorage.setItem('verifier', verifier);
+    const challenge = await sha256Challenge(verifier);
 
-  const redirectUri = window.location.origin + window.location.pathname;
-  sessionStorage.setItem('redirectUri', redirectUri);
+    let redirectUri = window.location.origin + (basePath ? basePath + '/' : '/');
+    sessionStorage.setItem('redirectUri', redirectUri);
 
-  const url = new URL(`${window.location.origin}${KEYCLOAK}/realms/${REALM}/protocol/openid-connect/auth`);
-  url.searchParams.set('client_id', CLIENT_ID);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'openid profile email');
-  url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('code_challenge', challenge);
-  url.searchParams.set('code_challenge_method', 'S256');
+    const authUrl = `${window.location.origin}${KEYCLOAK}/realms/${REALM}/protocol/openid-connect/auth`;
+    const url = new URL(authUrl);
+    url.searchParams.set('client_id', CLIENT_ID);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'openid profile email');
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
 
-  window.location.href = url.toString();
+    console.log('Redirecting to:', url.toString());
+    window.location.href = url.toString();
+  } catch (err) {
+    console.error('Failed to start login:', err);
+    alert('Failed to start login: ' + err.message);
+  }
 }
 
 async function handleAuthCallback() {
@@ -60,13 +68,19 @@ async function handleAuthCallback() {
   if (!code) return;
 
   const verifier = sessionStorage.getItem('verifier');
-  const redirectUri = sessionStorage.getItem('redirectUri') || (window.location.origin + window.location.pathname);
+  let redirectUri = sessionStorage.getItem('redirectUri') || (window.location.origin + (basePath ? basePath + '/' : '/'));
+
+  // Clean code param from URL without refreshing
   window.history.replaceState({}, document.title, window.location.pathname);
 
-  if (!verifier) return;
+  if (!verifier) {
+    console.warn('No PKCE verifier found in sessionStorage');
+    return;
+  }
 
   try {
-    const res = await fetch(`${KEYCLOAK}/realms/${REALM}/protocol/openid-connect/token`, {
+    const tokenUrl = `${KEYCLOAK}/realms/${REALM}/protocol/openid-connect/token`;
+    const res = await fetch(tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -78,13 +92,18 @@ async function handleAuthCallback() {
       }).toString(),
     });
 
-    if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`Token exchange failed (HTTP ${res.status}): ${errBody}`);
+    }
 
     const data = await res.json();
     sessionStorage.setItem('token', data.access_token);
     sessionStorage.removeItem('verifier');
+    console.log('OAuth token obtained successfully');
   } catch (err) {
-    console.error('OAuth error:', err);
+    console.error('OAuth token exchange error:', err);
+    alert('OAuth login failed: ' + err.message);
   }
 }
 
@@ -93,6 +112,8 @@ async function updateAuthUI() {
   const loginBtn = document.getElementById('login-btn');
   const userInfo = document.getElementById('user-info');
   const usernameSpan = document.getElementById('username');
+
+  if (!loginBtn || !userInfo || !usernameSpan) return;
 
   if (!token) {
     loginBtn.style.display = 'inline-block';
@@ -127,73 +148,96 @@ function logout() {
   updateAuthUI();
 }
 
-// --- Secrets Logic ---
-document.getElementById('create-btn').addEventListener('click', async () => {
-  const secret = document.getElementById('secret').value.trim();
-  if (!secret) return;
+function setupListeners() {
+  const createBtn = document.getElementById('create-btn');
+  if (createBtn) {
+    createBtn.addEventListener('click', async () => {
+      const secret = document.getElementById('secret').value.trim();
+      if (!secret) return;
 
-  const btn = document.getElementById('create-btn');
-  const result = document.getElementById('create-result');
-  const error = document.getElementById('create-error');
-  btn.disabled = true;
-  result.hidden = true;
-  error.hidden = true;
+      const btn = document.getElementById('create-btn');
+      const result = document.getElementById('create-result');
+      const error = document.getElementById('create-error');
+      btn.disabled = true;
+      result.hidden = true;
+      error.hidden = true;
 
-  try {
-    const res = await fetch(`${API}/secrets`, {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ ciphertext: secret }),
+      try {
+        const res = await fetch(`${API}/secrets`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ ciphertext: secret }),
+        });
+        if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+
+        const { payload_id } = await res.json();
+        result.textContent = payload_id;
+        result.hidden = false;
+        document.getElementById('secret').value = '';
+      } catch (e) {
+        error.textContent = e.message;
+        error.hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
     });
-    if (!res.ok) throw new Error(`API returned ${res.status}`);
-
-    const { payload_id } = await res.json();
-    result.textContent = payload_id;
-    result.hidden = false;
-  } catch (e) {
-    error.textContent = e.message;
-    error.hidden = false;
-  } finally {
-    btn.disabled = false;
   }
-});
 
-document.getElementById('retrieve-btn').addEventListener('click', async () => {
-  const id = document.getElementById('payload-id').value.trim();
-  if (!id) return;
+  const retrieveBtn = document.getElementById('retrieve-btn');
+  if (retrieveBtn) {
+    retrieveBtn.addEventListener('click', async () => {
+      const id = document.getElementById('payload-id').value.trim();
+      if (!id) return;
 
-  const btn = document.getElementById('retrieve-btn');
-  const result = document.getElementById('retrieve-result');
-  const error = document.getElementById('retrieve-error');
-  btn.disabled = true;
-  result.hidden = true;
-  error.hidden = true;
+      const btn = document.getElementById('retrieve-btn');
+      const result = document.getElementById('retrieve-result');
+      const error = document.getElementById('retrieve-error');
+      btn.disabled = true;
+      result.hidden = true;
+      error.hidden = true;
 
-  try {
-    const res = await fetch(`${API}/secrets/${id}`, {
-      headers: getHeaders(),
+      try {
+        const res = await fetch(`${API}/secrets/${id}`, {
+          headers: getHeaders(),
+        });
+        if (res.status === 404) throw new Error('Secret not found or already burned.');
+        if (!res.ok) throw new Error(`API returned HTTP ${res.status}`);
+
+        const { ciphertext } = await res.json();
+        result.innerHTML = escapeHtml(ciphertext);
+        result.hidden = false;
+        document.getElementById('payload-id').value = '';
+      } catch (e) {
+        error.textContent = e.message;
+        error.hidden = false;
+      } finally {
+        btn.disabled = false;
+      }
     });
-    if (res.status === 404) throw new Error('Secret not found.');
-    if (!res.ok) throw new Error(`API returned ${res.status}`);
-
-    const { ciphertext } = await res.json();
-    result.innerHTML = escapeHtml(ciphertext);
-    result.hidden = false;
-  } catch (e) {
-    error.textContent = e.message;
-    error.hidden = false;
-  } finally {
-    btn.disabled = false;
   }
-});
 
-document.getElementById('login-btn').addEventListener('click', login);
-document.getElementById('logout-btn').addEventListener('click', logout);
+  const loginBtn = document.getElementById('login-btn');
+  if (loginBtn) {
+    loginBtn.addEventListener('click', login);
+  }
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', logout);
+  }
+}
 
 // --- Init ---
-(async () => {
+async function init() {
+  setupListeners();
   if (window.location.search.includes('code=')) {
     await handleAuthCallback();
   }
   await updateAuthUI();
-})();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}

@@ -10,6 +10,16 @@ services:
           memory: 64M
     labels:
       - "traefik.enable=true"
+      # Redirect /pr-N to /pr-N/
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.rule=Path(`/pr-${PR_NUMBER}`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.entrypoints=web"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.priority=20"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.middlewares=pr-${PR_NUMBER}-redirect-slash"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-redirect-slash.redirectregex.regex=^/pr-${PR_NUMBER}($|\\?.*)"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-redirect-slash.redirectregex.replacement=/pr-${PR_NUMBER}/$${1}"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-redirect-slash.redirectregex.permanent=true"
+
+      # Main web router
       - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=PathPrefix(`/pr-${PR_NUMBER}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
