@@ -1,4 +1,5 @@
 import pytest
+from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import make_token
 
@@ -58,8 +59,37 @@ class TestMeEndpoint:
         r = await client.get("/me", headers={"Authorization": "Bearer not.a.jwt"})
         assert r.status_code == 401
 
-    async def test_keycloak_unreachable_returns_503(self, client_no_keycloak, private_key_pem):
+    async def test_keycloak_unreachable_returns_503(
+        self, client_no_keycloak, private_key_pem
+    ):
         token = make_token(private_key_pem)
-        r = await client_no_keycloak.get("/me", headers={"Authorization": f"Bearer {token}"})
+        r = await client_no_keycloak.get(
+            "/me", headers={"Authorization": f"Bearer {token}"}
+        )
         assert r.status_code == 503
         assert "unavailable" in r.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Global Exception Handling
+# ---------------------------------------------------------------------------
+class TestErrorHandling:
+    async def test_unhandled_exception_returns_500_without_leaking_traceback(self):
+        from app.api.routes.secrets import get_secret_service
+        from app.main import app
+
+        def _crashing_service():
+            raise RuntimeError("Database password leaked in raw traceback :(")
+
+        app.dependency_overrides[get_secret_service] = _crashing_service
+
+        try:
+            transport = ASGITransport(app=app, raise_app_exceptions=False)
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                r = await ac.get("/secrets/any-id")
+
+                assert r.status_code == 500
+                assert r.json() == {"detail": "Internal server error"}
+                assert "password leaked" not in r.text
+        finally:
+            app.dependency_overrides.clear()
