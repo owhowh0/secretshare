@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # Audit
     audit_enabled: bool = True
 
+    # Payload limits. 64 KB per CLAUDE.md §7; the relay stays blind to the
+    # envelope's contents, so total size is the only thing it may judge.
+    max_payload_bytes: int = 65536
+
     # CORS
     allowed_origins: list[str] = [
         "http://localhost:3000",
