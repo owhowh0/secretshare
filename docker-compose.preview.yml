@@ -9,8 +9,6 @@ services:
     environment:
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_TRUST_HOST=true
-      - AUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
-      - NEXTAUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
       - AUTH_KEYCLOAK_SECRET=
       - AUTH_KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
