@@ -6,6 +6,13 @@ export const metadata: Metadata = {
   title: 'SecretShare',
 }
 
+// The CSP in middleware.ts carries a per-request nonce, and Next can only stamp
+// it onto its inline scripts while rendering. A prerendered page would be served
+// from the build-time cache with a stale nonce that no longer matches the header,
+// so every script on it would be blocked. Nothing here is cacheable anyway: the
+// page is an authenticated client-side app that calls the API on each action.
+export const dynamic = 'force-dynamic'
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
