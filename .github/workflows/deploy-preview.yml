@@ -97,6 +97,7 @@ jobs:
               `- **API Docs / Swagger**: [${previewUrl}](${previewUrl})`,
               `- **Health Check**: \`${healthUrl}\``,
               `- **Keycloak Admin Console**: [${keycloakUrl}](${keycloakUrl}) — user: \`admin\``,
+              `- **OAuth Test User**: \`testuser\` / \`testpassword123\` (Realm: \`secretshare\`, Client: \`secretshare-api\`)`,
               "",
               "> *Accessible to team members on Tailscale.*",
             ].join("\n");

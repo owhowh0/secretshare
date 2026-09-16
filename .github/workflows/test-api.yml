@@ -10,7 +10,7 @@ on:
 
 jobs:
   test:
-    name: Run API tests
+    name: Run API unit tests
     runs-on: ubuntu-latest
 
     defaults:
@@ -31,5 +31,68 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run tests
-        run: python -m pytest -q
+      - name: Run unit tests
+        run: python -m pytest -q -m "not integration"
+
+  oauth-integration:
+    name: Run OAuth live integration tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Prepare environment
+        run: |
+          docker network create traefik-net || true
+          POSTGRES_PWD=$(openssl rand -hex 16)
+          KC_PWD=$(openssl rand -hex 16)
+          cat <<EOF > .env
+          POSTGRES_USER=secretshare
+          POSTGRES_PASSWORD=${POSTGRES_PWD}
+          POSTGRES_DB=secretshare
+          KEYCLOAK_ADMIN=admin
+          KEYCLOAK_ADMIN_PASSWORD=${KC_PWD}
+          KEYCLOAK_DB=keycloak
+          KEYCLOAK_REALM=secretshare
+          KEYCLOAK_CLIENT_ID=secretshare-api
+          EOF
+
+      - name: Start Docker services
+        run: |
+          docker compose up -d --wait db keycloak traefik
+
+      - name: Run OAuth integration tests
+        env:
+          KEYCLOAK_URL: http://localhost:80/keycloak
+          KEYCLOAK_REALM: secretshare
+          KEYCLOAK_CLIENT_ID: secretshare-api
+          TEST_USER_USERNAME: testuser
+          TEST_USER_PASSWORD: testpassword123
+          TEST_USER_EMAIL: test@example.com
+          REQUIRE_KEYCLOAK: "1"
+        working-directory: api
+        run: |
+          python -m pytest -v -m integration tests/test_oauth_integration.py
+
+      - name: Output container logs on failure
+        if: failure()
+        run: |
+          docker compose logs keycloak
+          docker compose logs db
+
+      - name: Tear down services
+        if: always()
+        run: |
+          docker compose down -v
