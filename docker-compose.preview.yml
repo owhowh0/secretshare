@@ -1,8 +1,11 @@
 services:
   web:
-    image: nginx:alpine
-    volumes:
-      - ./web:/usr/share/nginx/html:ro
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BASE_PATH: "/pr-${PR_NUMBER}"
+        NEXT_PUBLIC_API_BASE: "/pr-${PR_NUMBER}/api"
     deploy:
       resources:
         limits:
@@ -27,7 +30,7 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.middlewares=pr-${PR_NUMBER}-web-strip"
       - "traefik.http.middlewares.pr-${PR_NUMBER}-web-strip.stripprefix.prefixes=/pr-${PR_NUMBER}"
-      - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=80"
+      - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default
       - traefik-net
