@@ -28,8 +28,6 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
-      - "traefik.http.routers.pr-${PR_NUMBER}-web.middlewares=pr-${PR_NUMBER}-web-strip"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-web-strip.stripprefix.prefixes=/pr-${PR_NUMBER}"
       - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default
