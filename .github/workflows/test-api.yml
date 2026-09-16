@@ -45,8 +45,8 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql+asyncpg://secretshare:secretshare@127.0.0.1:5432/secretshare
-      TEST_DATABASE_URL: postgresql+asyncpg://secretshare:secretshare@127.0.0.1:5432/secretshare
+      DATABASE_URL: ******127.0.0.1:5432/secretshare
+      TEST_DATABASE_URL: ******127.0.0.1:5432/secretshare
       TEST_REDIS_URL: redis://127.0.0.1:6379/0
 
     steps:
@@ -78,3 +78,87 @@ jobs:
             echo "They assert the invariants in CLAUDE.md §2 and must always run."
             exit 1
           fi
+
+  oauth-integration:
+    name: Run OAuth live integration tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: api
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Prepare environment
+        run: |
+          docker network create traefik-net || true
+          POSTGRES_PWD=$(openssl rand -hex 16)
+          KC_PWD=$(openssl rand -hex 16)
+          cat <<EOF > .env
+          POSTGRES_USER=secretshare
+          POSTGRES_PASSWORD=${POSTGRES_PWD}
+          POSTGRES_DB=secretshare
+          KEYCLOAK_ADMIN=admin
+          KEYCLOAK_ADMIN_PASSWORD=${KC_PWD}
+          KEYCLOAK_DB=keycloak
+          KEYCLOAK_REALM=secretshare
+          KEYCLOAK_CLIENT_ID=secretshare-api
+          EOF
+
+      - name: Start Docker services
+        run: |
+          docker compose up -d --wait db keycloak traefik web api
+
+      - name: Verify path-based routing & health
+        run: |
+          echo "=== Testing Web UI at / ==="
+          HTML_OUTPUT=$(curl -s -f -m 5 http://localhost:80/)
+          echo "$HTML_OUTPUT" | grep -q "SecretShare"
+          NEXT_ASSET_PATH=$(echo "$HTML_OUTPUT" | grep -oE '/_next/static/[^"]+\.js' | head -n1)
+          [ -n "$NEXT_ASSET_PATH" ] || { echo "Missing Next.js static asset reference in HTML"; exit 1; }
+          curl -s -f -m 5 "http://localhost:80${NEXT_ASSET_PATH}" >/dev/null
+
+          echo "=== Testing API at /api ==="
+          curl -s -f http://localhost:80/api/health | grep -q '"status":"ok"'
+          curl -s -f -I http://localhost:80/api/docs | grep -q "200 OK"
+
+          echo "=== Testing Keycloak at /keycloak ==="
+          curl -s -f http://localhost:80/keycloak/realms/secretshare | grep -q '"realm":"secretshare"'
+
+          echo "=== All path routing checks passed! ==="
+
+      - name: Run OAuth integration tests
+        env:
+          KEYCLOAK_URL: http://localhost:80/keycloak
+          KEYCLOAK_REALM: secretshare
+          KEYCLOAK_CLIENT_ID: secretshare-api
+          TEST_USER_USERNAME: testuser
+          TEST_USER_PASSWORD: testpassword123
+          TEST_USER_EMAIL: test@example.com
+          API_BASE_URL: http://localhost:80/api
+          REQUIRE_KEYCLOAK: "1"
+        working-directory: api
+        run: |
+          python -m pytest -v -m integration tests/test_oauth_integration.py
+
+      - name: Output container logs on failure
+        if: failure()
+        run: |
+          docker compose logs keycloak
+          docker compose logs db
+          docker compose logs api
+          docker compose logs web
+
+      - name: Tear down services
+        if: always()
+        run: |
+          docker compose down -v

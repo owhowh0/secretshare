@@ -78,7 +78,7 @@ def make_token(
     **extra_claims,
 ) -> str:
     """Signs a JWT with our test RSA private key."""
-    from jose import jwt
+    import jwt
 
     claims = {
         "sub": "user-123",
@@ -105,19 +105,14 @@ def _override_settings() -> Settings:
 
 
 @pytest_asyncio.fixture
-async def client(monkeypatch, jwks_document):
-    """
-    AsyncClient with settings overridden and _fetch_jwks mocked
-    to return our test JWKS document without hitting the network.
-    """
-    auth_module._jwks_cache = None
-    auth_module._jwks_fetched_at = 0.0
+async def client(jwks_document):
+    from jwt import PyJWKClient
+
+    mock_jwks = PyJWKClient("http://test-certs")
+    mock_jwks.fetch_data = lambda: jwks_document
+
     app.dependency_overrides[get_settings] = _override_settings
-
-    async def _mock_fetch_jwks(settings, *, force=False):
-        return jwks_document
-
-    monkeypatch.setattr(auth_module, "_fetch_jwks", _mock_fetch_jwks)
+    app.dependency_overrides[auth_module.get_jwks_client] = lambda: mock_jwks
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
@@ -126,19 +121,19 @@ async def client(monkeypatch, jwks_document):
 
 
 @pytest_asyncio.fixture
-async def client_no_keycloak(monkeypatch):
-    """
-    Same as client but _fetch_jwks raises a connection error,
-    simulating Keycloak being unreachable.
-    """
-    auth_module._jwks_cache = None
-    auth_module._jwks_fetched_at = 0.0
+async def client_no_keycloak():
+    import jwt
+    from jwt import PyJWKClient
+
+    mock_jwks = PyJWKClient("http://test-certs")
+
+    def _fail():
+        raise jwt.exceptions.PyJWKClientConnectionError("Connection refused")
+
+    mock_jwks.fetch_data = _fail
+
     app.dependency_overrides[get_settings] = _override_settings
-
-    async def _mock_fetch_jwks_fail(settings, *, force=False):
-        raise httpx.ConnectError("Connection refused")
-
-    monkeypatch.setattr(auth_module, "_fetch_jwks", _mock_fetch_jwks_fail)
+    app.dependency_overrides[auth_module.get_jwks_client] = lambda: mock_jwks
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
