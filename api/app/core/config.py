@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     keycloak_realm: str = ""  # e.g. secretshare
     keycloak_client_id: str = ""  # e.g. secretshare-api
 
+    # Datastores
+    database_url: str = ""  # postgresql+asyncpg://... ; empty disables audit logging
+    redis_url: str = "redis://localhost:6379/0"
+
+    # Audit
+    audit_enabled: bool = True
+
     # CORS
     allowed_origins: list[str] = [
         "http://localhost:3000",
