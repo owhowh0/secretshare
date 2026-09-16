@@ -5,24 +5,51 @@ services:
       - "--api.insecure=true"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-net"
       - "--entrypoints.web.address=:80"
     ports:
-      - "80:80"
-      - "8080:8080"
+      - "${TRAEFIK_WEB_PORT:-80}:80"
+      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - traefik-net
 
   web:
-    image: nginx:alpine
-    volumes:
-      - ./web:/usr/share/nginx/html:ro
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BASE_PATH: ""
+        NEXT_PUBLIC_API_BASE: "/api"
+    environment:
+      - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
+      - AUTH_TRUST_HOST=true
+      - AUTH_KEYCLOAK_ID=secretshare-api
+      - AUTH_KEYCLOAK_SECRET=
+      - AUTH_KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
+      - KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
+      - KEYCLOAK_CLIENT_ID=secretshare-api
+    extra_hosts:
+      - "localhost:host-gateway"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.web.rule=Host(`app.localhost`)"
+      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
       - "traefik.http.routers.web.entrypoints=web"
-      - "traefik.http.services.web.loadbalancer.server.port=80"
+      - "traefik.http.routers.web.priority=10"
+
+      # NextAuth router: route /api/auth to web instead of api (priority 150 > api 100)
+      - "traefik.http.routers.web-auth.rule=PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.web-auth.entrypoints=web"
+      - "traefik.http.routers.web-auth.priority=150"
+      - "traefik.http.routers.web-auth.service=web"
+
+      - "traefik.http.services.web.loadbalancer.server.port=3000"
     networks:
       - traefik-net
 
@@ -34,11 +61,12 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-secretshare}
       - POSTGRES_DB=${POSTGRES_DB:-secretshare}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-secretshare}
-      - REDIS_URL=redis://redis:6379/0
-      - KEYCLOAK_URL=http://keycloak:8080/keycloak
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-}
-      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare}
+      - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:6379/0}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080${KEYCLOAK_PATH:-/keycloak}}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
+      - API_ROOT_PATH=/api
     depends_on:
       db:
         condition: service_healthy
@@ -46,8 +74,11 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`api.staging-server`) || Host(`api.localhost`)"
+      - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
       - "traefik.http.routers.api.entrypoints=web"
+      - "traefik.http.routers.api.priority=100"
+      - "traefik.http.routers.api.middlewares=api-strip"
+      - "traefik.http.middlewares.api-strip.stripprefix.prefixes=/api"
       - "traefik.http.services.api.loadbalancer.server.port=8000"
     networks:
       - default
@@ -59,10 +90,12 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-secretshare}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-secretshare}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-secretshare} -d ${POSTGRES_DB:-secretshare}"]
       interval: 5s
@@ -75,7 +108,7 @@ services:
     image: redis:7-alpine
     command: redis-server --save "" --appendonly no
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -84,18 +117,53 @@ services:
     networks:
       - default
 
+  keycloak-db-init:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-secretshare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-secretshare}
+      KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        echo "Ensuring Keycloak database $${KEYCLOAK_DB} exists..."
+        psql -h db -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" <<-EOSQL
+          SELECT format('CREATE DATABASE %I', '$${KEYCLOAK_DB}')
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$${KEYCLOAK_DB}')\gexec
+          GRANT ALL PRIVILEGES ON DATABASE "$${KEYCLOAK_DB}" TO "$${POSTGRES_USER}";
+        EOSQL
+    networks:
+      - default
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    command: start-dev
+    command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
-      KC_HTTP_RELATIVE_PATH: /keycloak
+      KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - keycloak-data:/opt/keycloak/data
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      keycloak-db-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
       interval: 10s
@@ -104,8 +172,9 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.keycloak.rule=PathPrefix(`/keycloak`)"
+      - "traefik.http.routers.keycloak.rule=PathPrefix(`${KEYCLOAK_PATH:-/keycloak}`)"
       - "traefik.http.routers.keycloak.entrypoints=web"
+      - "traefik.http.routers.keycloak.priority=200"
       - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
     networks:
       - default
