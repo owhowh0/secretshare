@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSession } from 'next-auth/react'
-import { loginAction, logoutAction } from './actions'
+import { useSession, signIn, signOut } from 'next-auth/react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api'
 
@@ -30,11 +29,11 @@ export default function Page() {
   }
 
   async function handleLogin() {
-    await loginAction()
+    await signIn('keycloak')
   }
 
   async function handleLogout() {
-    await logoutAction()
+    await signOut()
   }
 
   async function handleCreate() {
@@ -92,16 +91,12 @@ export default function Page() {
           {status === 'authenticated' && username ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <span className="muted">{username}</span>
-              <form action={logoutAction} style={{ display: 'inline' }}>
-                <button id="logout-btn" type="submit" style={{ background: '#333', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
-                  Logout
-                </button>
-              </form>
+              <button id="logout-btn" onClick={handleLogout} style={{ background: '#333', fontSize: '0.85rem', padding: '0.4rem 0.8rem' }}>
+                Logout
+              </button>
             </div>
           ) : (
-            <form action={loginAction} style={{ display: 'inline' }}>
-              <button id="login-btn" type="submit">Login with Keycloak</button>
-            </form>
+            <button id="login-btn" onClick={handleLogin}>Login with Keycloak</button>
           )}
         </div>
       </header>
