@@ -234,14 +234,19 @@ jobs:
               exit 1
             fi
 
-            AUTH_RETRIEVED=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${AUTH_PAYLOAD_ID}" \
-              -H "Authorization: Bearer ${ACCESS_TOKEN}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
+            AUTH_RETRIEVED=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets/reveal" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              -d "{\"payload_id\": \"${AUTH_PAYLOAD_ID}\"}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
             if [ "${AUTH_RETRIEVED}" != "authenticated-e2e-smoke-test" ]; then
               echo "Error: Retrieved authenticated secret does not match expected payload"
               exit 1
             fi
 
-            AUTH_BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${AUTH_PAYLOAD_ID}")
+            AUTH_BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets/reveal" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+              -d "{\"payload_id\": \"${AUTH_PAYLOAD_ID}\"}")
             [ "$AUTH_BURN_CODE" = "404" ] || { echo "Error: Expected 404 on second retrieval (burn), got $AUTH_BURN_CODE"; exit 1; }
             echo "-> Authenticated secret lifecycle verified (created, retrieved, burned)"
 
@@ -255,13 +260,17 @@ jobs:
               exit 1
             fi
 
-            RETRIEVED=$(curl -s -f -m 10 "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${PAYLOAD_ID}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
+            RETRIEVED=$(curl -s -f -m 10 -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets/reveal" \
+              -H "Content-Type: application/json" \
+              -d "{\"payload_id\": \"${PAYLOAD_ID}\"}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
             if [ "${RETRIEVED}" != "anonymous-e2e-smoke-test" ]; then
               echo "Error: Retrieved secret does not match expected payload"
               exit 1
             fi
 
-            BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1/pr-${PR_NUM}/api/secrets/${PAYLOAD_ID}")
+            BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://127.0.0.1/pr-${PR_NUM}/api/secrets/reveal" \
+              -H "Content-Type: application/json" \
+              -d "{\"payload_id\": \"${PAYLOAD_ID}\"}")
             [ "$BURN_CODE" = "404" ] || { echo "Error: Expected 404 on second retrieval (burn), got $BURN_CODE"; exit 1; }
             echo "-> Anonymous secret lifecycle verified (created, retrieved, burned)"
 
