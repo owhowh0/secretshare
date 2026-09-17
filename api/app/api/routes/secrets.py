@@ -4,6 +4,7 @@ from app.core.rate_limit import RateLimiter
 from app.schemas.secrets import (
     SecretCreateRequest,
     SecretCreateResponse,
+    SecretRevealRequest,
     SecretRetrieveResponse,
 )
 from app.services.secrets import SecretService
@@ -62,17 +63,22 @@ async def create_secret(
     return SecretCreateResponse(payload_id=payload_id)
 
 
-@router.get(
-    "/{payload_id}",
+# The payload id is the capability that unlocks a secret, so it travels in the
+# request body, never in the URL path (AUD-6). A path id is copied verbatim into
+# uvicorn's access log, proxy logs, and browser history, which would put a live
+# capability in plaintext next to the audit row that deliberately truncates it.
+@router.post(
+    "/reveal",
     response_model=SecretRetrieveResponse,
     dependencies=[Depends(retrieve_rate_limit)],
 )
-async def retrieve_secret(
+async def reveal_secret(
     request: Request,
-    payload_id: str,
+    payload: SecretRevealRequest,
     service: SecretService = Depends(get_secret_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> SecretRetrieveResponse:
+    payload_id = payload.payload_id
     ciphertext = await service.retrieve_secret(payload_id)
 
     await audit.record(

@@ -87,7 +87,7 @@ class TestErrorHandling:
         try:
             transport = ASGITransport(app=app, raise_app_exceptions=False)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                r = await ac.get("/secrets/any-id")
+                r = await ac.post("/secrets/reveal", json={"payload_id": "any-id"})
 
                 assert r.status_code == 500
                 assert r.json() == {"detail": "Internal server error"}

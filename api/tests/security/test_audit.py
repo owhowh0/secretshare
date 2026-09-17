@@ -82,7 +82,7 @@ class TestNoSecretMaterialInAudit:
         created = client.post("/secrets", json={"ciphertext": CIPHERTEXT})
         payload_id = created.json()["payload_id"]
 
-        client.get(f"/secrets/{payload_id}")
+        client.post("/secrets/reveal", json={"payload_id": payload_id})
 
         assert len(audit.events) == 2
         for event in audit.events:
@@ -126,7 +126,7 @@ class TestEventsRecorded:
         ).json()["payload_id"]
         audit.events.clear()
 
-        client.get(f"/secrets/{payload_id}")
+        client.post("/secrets/reveal", json={"payload_id": payload_id})
 
         assert [e["event_type"] for e in audit.events] == ["revealed"]
 
@@ -134,15 +134,15 @@ class TestEventsRecorded:
         payload_id = client.post(
             "/secrets", json={"ciphertext": CIPHERTEXT}
         ).json()["payload_id"]
-        client.get(f"/secrets/{payload_id}")
+        client.post("/secrets/reveal", json={"payload_id": payload_id})
         audit.events.clear()
 
-        client.get(f"/secrets/{payload_id}")
+        client.post("/secrets/reveal", json={"payload_id": payload_id})
 
         assert [e["event_type"] for e in audit.events] == ["denied"]
 
     def test_unknown_id_records_denied(self, client, audit) -> None:
-        client.get(f"/secrets/{new_payload_id()}")
+        client.post("/secrets/reveal", json={"payload_id": new_payload_id()})
 
         assert [e["event_type"] for e in audit.events] == ["denied"]
 
@@ -166,10 +166,10 @@ class TestAuditDoesNotWeakenResponses:
         payload_id = client.post(
             "/secrets", json={"ciphertext": CIPHERTEXT}
         ).json()["payload_id"]
-        client.get(f"/secrets/{payload_id}")
+        client.post("/secrets/reveal", json={"payload_id": payload_id})
 
-        burned = client.get(f"/secrets/{payload_id}")
-        missing = client.get(f"/secrets/{new_payload_id()}")
+        burned = client.post("/secrets/reveal", json={"payload_id": payload_id})
+        missing = client.post("/secrets/reveal", json={"payload_id": new_payload_id()})
 
         assert burned.status_code == missing.status_code == 404
         assert burned.json() == missing.json()
@@ -193,11 +193,11 @@ class TestAuditDoesNotWeakenResponses:
                 assert created.status_code == 201
 
                 payload_id = created.json()["payload_id"]
-                revealed = c.get(f"/secrets/{payload_id}")
+                revealed = c.post("/secrets/reveal", json={"payload_id": payload_id})
 
                 assert revealed.status_code == 200
                 assert revealed.json() == {"ciphertext": CIPHERTEXT}
-                assert c.get(f"/secrets/{payload_id}").status_code == 404
+                assert c.post("/secrets/reveal", json={"payload_id": payload_id}).status_code == 404
         finally:
             app.dependency_overrides.clear()
 

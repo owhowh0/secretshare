@@ -139,16 +139,18 @@ class TestOAuthLiveIntegration:
         assert payload_id, "Missing payload_id in response"
 
         # 2. Retrieve secret with auth header
-        get_resp = await api_client.get(
-            f"/secrets/{payload_id}",
+        get_resp = await api_client.post(
+            "/secrets/reveal",
             headers={"Authorization": f"Bearer {user_token}"},
+            json={"payload_id": payload_id},
         )
         assert get_resp.status_code == 200, f"Retrieve failed: {get_resp.status_code} - {get_resp.text}"
         assert get_resp.json().get("ciphertext") == "authenticated-secret-payload"
 
         # 3. Retrieve secret a second time -> should be 404 burned
-        burn_resp = await api_client.get(
-            f"/secrets/{payload_id}",
+        burn_resp = await api_client.post(
+            "/secrets/reveal",
             headers={"Authorization": f"Bearer {user_token}"},
+            json={"payload_id": payload_id},
         )
         assert burn_resp.status_code == 404

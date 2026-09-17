@@ -7,6 +7,7 @@ from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.headers import SecurityHeadersMiddleware
 from app.core.limits import BODY_OVERHEAD_BYTES, BodySizeLimitMiddleware
+from app.core.logging_filters import install_secret_path_redaction
 from app.db.session import create_engine, create_session_factory, dispose_engine
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,12 +16,19 @@ from starlette.responses import JSONResponse
 
 logger = logging.getLogger("secretshare.api")
 
+# Installed at import time so no request can be logged before it is in place.
+install_secret_path_redaction()
+
 default_root = f"/pr-{os.environ['PR_NUMBER']}/api" if os.getenv("PR_NUMBER") else "/api"
 root_path = os.getenv("API_ROOT_PATH", default_root)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Re-installed here because uvicorn applies its own logging config after
+    # this module is imported, which replaces the handlers on uvicorn.access.
+    install_secret_path_redaction()
+
     settings = get_settings()
 
     redis = Redis.from_url(

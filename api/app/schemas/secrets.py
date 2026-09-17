@@ -16,5 +16,11 @@ class SecretCreateResponse(BaseModel):
     payload_id: str
 
 
+class SecretRevealRequest(BaseModel):
+    # Carried in the body rather than the path so the id never reaches an
+    # access log, proxy log, or browser history (AUD-6).
+    payload_id: str = Field(min_length=1, max_length=128)
+
+
 class SecretRetrieveResponse(BaseModel):
     ciphertext: str

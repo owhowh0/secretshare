@@ -64,8 +64,12 @@ export default function Page() {
     setRetrieveResult(null)
     setRetrieveError(null)
     try {
-      const res = await fetch(`${API_BASE}/secrets/${payloadId.trim()}`, {
+      // The id goes in the body, not the URL: a path id would be recorded by
+      // the access log, any proxy in front of it, and browser history (AUD-6).
+      const res = await fetch(`${API_BASE}/secrets/reveal`, {
+        method: 'POST',
         headers: getHeaders(),
+        body: JSON.stringify({ payload_id: payloadId.trim() }),
       })
       if (res.status === 404) throw new Error('Secret not found.')
       if (!res.ok) throw new Error(`API returned ${res.status}`)

@@ -103,10 +103,10 @@ class TestNoEnumerationOracle:
     async def test_missing_and_burned_are_identical(self, client):
         created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
         payload_id = created.json()["payload_id"]
-        assert (await client.get(f"/secrets/{payload_id}")).status_code == 200
+        assert (await client.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 200
 
-        burned = await client.get(f"/secrets/{payload_id}")
-        never_existed = await client.get(f"/secrets/{new_payload_id()}")
+        burned = await client.post("/secrets/reveal", json={"payload_id": payload_id})
+        never_existed = await client.post("/secrets/reveal", json={"payload_id": new_payload_id()})
 
         assert burned.status_code == never_existed.status_code == 404
         assert burned.content == never_existed.content
@@ -179,14 +179,14 @@ class TestSecurityHeaders:
         created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
         payload_id = created.json()["payload_id"]
 
-        response = await client.get(f"/secrets/{payload_id}")
+        response = await client.post("/secrets/reveal", json={"payload_id": payload_id})
 
         assert "no-store" in response.headers["cache-control"]
         assert response.headers["referrer-policy"] == "no-referrer"
 
     @requires_redis
     async def test_headers_present_on_a_miss_too(self, client):
-        response = await client.get(f"/secrets/{new_payload_id()}")
+        response = await client.post("/secrets/reveal", json={"payload_id": new_payload_id()})
 
         assert response.status_code == 404
         assert "no-store" in response.headers["cache-control"]
