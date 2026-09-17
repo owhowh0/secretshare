@@ -43,14 +43,14 @@ def test_retrieve_secret_burns_payload(client: TestClient) -> None:
         json={"ciphertext": "this-is-a-fake-ciphertext"},
     )
 
-    first_response = client.get("/secrets/test-id")
+    first_response = client.post("/secrets/reveal", json={"payload_id": "test-id"})
 
     assert first_response.status_code == 200
     assert first_response.json() == {
         "ciphertext": "this-is-a-fake-ciphertext",
     }
 
-    second_response = client.get("/secrets/test-id")
+    second_response = client.post("/secrets/reveal", json={"payload_id": "test-id"})
 
     assert second_response.status_code == 404
     assert second_response.json() == {

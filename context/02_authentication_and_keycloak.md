@@ -59,4 +59,4 @@ In `api/app/core/auth.py`:
 
 ### Protected Endpoints:
 - `GET /api/me`: Returns the decoded token claims (`sub`, `preferred_username`, `email`).
-- `POST /api/secrets` & `GET /api/secrets/{id}`: Accept optional `Authorization: Bearer <token>` to associate secrets with authenticated users.
+- `POST /api/secrets` & `POST /api/secrets/reveal`: Accept optional `Authorization: Bearer <token>` to associate secrets with authenticated users. Reveal takes the payload id in the request body, not the path, so it never reaches an access log (AUD-6).

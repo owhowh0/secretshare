@@ -112,8 +112,8 @@ class TestAuditReachesTheDatabase:
         payload_id = created.json()["payload_id"]
         prefix = payload_id[:PAYLOAD_ID_PREFIX_LENGTH]
 
-        assert (await client.get(f"/secrets/{payload_id}")).status_code == 200
-        assert (await client.get(f"/secrets/{payload_id}")).status_code == 404
+        assert (await client.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 200
+        assert (await client.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 404
 
         rows = await _fetch(session_factory, prefix)
         assert [row.event_type for row in rows] == ["created", "revealed", "denied"]
@@ -134,7 +134,7 @@ class TestAuditEnabledSetting:
         async with _client_with(session_factory, audit_enabled=False) as ac:
             created = await ac.post("/secrets", json={"ciphertext": CIPHERTEXT})
             payload_id = created.json()["payload_id"]
-            assert (await ac.get(f"/secrets/{payload_id}")).status_code == 200
+            assert (await ac.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 200
 
         app.dependency_overrides.clear()
         app.state.db_session_factory = None
@@ -156,9 +156,9 @@ class TestAuditEnabledSetting:
             assert created.status_code == 201
             payload_id = created.json()["payload_id"]
 
-            revealed = await ac.get(f"/secrets/{payload_id}")
+            revealed = await ac.post("/secrets/reveal", json={"payload_id": payload_id})
             assert revealed.status_code == 200
             assert revealed.json()["ciphertext"] == CIPHERTEXT
-            assert (await ac.get(f"/secrets/{payload_id}")).status_code == 404
+            assert (await ac.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 404
 
         app.dependency_overrides.clear()
