@@ -45,9 +45,9 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: ******127.0.0.1:5432/secretshare
-      TEST_DATABASE_URL: ******127.0.0.1:5432/secretshare
-      TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      DATABASE_URL: "postgresql+asyncpg://secretshare:secretshare@127.0.0.1:5432/secretshare"
+      TEST_DATABASE_URL: "postgresql+asyncpg://secretshare:secretshare@127.0.0.1:5432/secretshare"
+      TEST_REDIS_URL: "redis://127.0.0.1:6379/0"
 
     steps:
       - name: Check out repository
@@ -120,20 +120,9 @@ jobs:
 
       - name: Verify path-based routing & health
         run: |
-          echo "=== Testing Web UI at / ==="
-          HTML_OUTPUT=$(curl -s -f -m 5 http://localhost:80/)
-          echo "$HTML_OUTPUT" | grep -q "SecretShare"
-          NEXT_ASSET_PATH=$(echo "$HTML_OUTPUT" | grep -oE '/_next/static/[^"]+\.js' | head -n1)
-          [ -n "$NEXT_ASSET_PATH" ] || { echo "Missing Next.js static asset reference in HTML"; exit 1; }
-          curl -s -f -m 5 "http://localhost:80${NEXT_ASSET_PATH}" >/dev/null
-
-          echo "=== Testing API at /api ==="
-          curl -s -f http://localhost:80/api/health | grep -q '"status":"ok"'
-          curl -s -f -I http://localhost:80/api/docs | grep -q "200 OK"
-
-          echo "=== Testing Keycloak at /keycloak ==="
+          bash .github/scripts/test_web_routing.sh "http://localhost:80" false
+          bash .github/scripts/test_api_docs.sh "http://localhost:80"
           curl -s -f http://localhost:80/keycloak/realms/secretshare | grep -q '"realm":"secretshare"'
-
           echo "=== All path routing checks passed! ==="
 
       - name: Run OAuth integration tests
