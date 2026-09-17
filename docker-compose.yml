@@ -25,10 +25,11 @@ services:
     environment:
       - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
       - AUTH_TRUST_HOST=true
+      - AUTH_URL=http://localhost:${TRAEFIK_WEB_PORT:-80}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
       - AUTH_KEYCLOAK_SECRET=
-      - AUTH_KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
-      - KEYCLOAK_ISSUER=http://localhost/keycloak/realms/secretshare
+      - AUTH_KEYCLOAK_ISSUER=http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/secretshare
+      - KEYCLOAK_ISSUER=http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/secretshare
       - KEYCLOAK_CLIENT_ID=secretshare-api
     extra_hosts:
       - "localhost:host-gateway"
