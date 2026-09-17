@@ -59,6 +59,20 @@ how it is implemented, how it was tested, and what it does **not** cover.
 
 ---
 
+## Authentication
+
+### AUTH-1 — Token validation errors disclosed why the token was rejected
+
+| | |
+|---|---|
+| **Security problem** | `get_current_user` interpolated the PyJWT exception into the 401 body, returning `Token signing key not found: Unable to find a signing key that matches: 'unknown-kid'` or `Invalid token: Signature has expired`. Each failure mode produced a different message, so the endpoint answered "which part of your token is wrong?" for anyone who asked. That turns a single 401 into a forgery oracle: an attacker crafting a token learns whether the signature verified but the audience was wrong, whether the key id was unknown, or whether only the expiry failed, and fixes one field at a time. |
+| **Relevance** | Brief §2 requires error handling that does not expose sensitive information, and CLAUDE.md §8 requires generic error responses with no variation between failure causes. The same reasoning already applied to secrets under invariant 5 — a missing and a burned secret are indistinguishable — was not applied to authentication, leaving the inconsistency on the one endpoint that guards every other one. |
+| **Implementation** | `app/core/auth.py` returns a single module-level constant `_INVALID_TOKEN_DETAIL = "Invalid or expired token"` from both 401 paths, so the two branches are textually identical and cannot drift apart. The diagnostic detail is not discarded: each handler logs it to `secretshare.auth` at WARNING before raising, recording the exception type and message but never the token itself, since a bearer token is a live credential (invariant 6). The previously silent `except Exception` now logs via `logger.exception`, so an unexpected 503 is no longer undebuggable. `WWW-Authenticate: Bearer` is unchanged across all rejections. |
+| **How tested** | `tests/security/test_auth_error_disclosure.py` — six distinct failure modes (expired, wrong audience, unknown kid, malformed, empty segments, tampered signature) are asserted to produce **byte-identical** response bodies, not merely equal status codes. A parametrised test asserts no PyJWT vocabulary (`signing key`, `kid`, `audience`, `signature`, `algorithm`, `PyJWK`, `Unable to find`) appears anywhere in any response. Two tests assert the reason *is* present in the server log via `caplog`, so the fix suppresses disclosure without destroying operator diagnostics, and one asserts the bearer token — and separately its signature segment — never reaches the log at any level. 13 tests, all passing. |
+| **Limitations** | **Timing is not addressed and remains a potential oracle.** Measured over 30 requests per case against the test client, an expired token and an unknown `kid` were indistinguishable (median 2.11 ms vs 2.05 ms) — but only because the test JWKS is pre-cached in memory. In production an unrecognised `kid` can miss `PyJWKClient`'s cache and trigger a network fetch from Keycloak, which would make that path far slower than a locally-detected expiry and reintroduce the distinction the constant body removes. This has not been measured against a live Keycloak, so the control is verified for response *content* only. Closing it requires constant-time handling of the whole validation path and was explicitly out of scope here. The 503 for an unreachable Keycloak is also still distinguishable from a 401, which tells a prober about infrastructure state rather than about their token. Log volume is a second-order concern: a token-guessing attack now writes one WARNING per attempt, which is useful for detection but unbounded, and rate limiting rather than this control is what should bound it. |
+
+---
+
 ## Open finding
 
 ### AUD-6 — The full payload id is written to the web server access log
