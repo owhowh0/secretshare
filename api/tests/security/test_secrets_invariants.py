@@ -16,7 +16,12 @@ import os
 
 import pytest
 import pytest_asyncio
-from app.api.routes.secrets import get_audit_service, get_secret_service
+from app.api.routes.secrets import (
+    create_rate_limit,
+    get_audit_service,
+    get_secret_service,
+    retrieve_rate_limit,
+)
 from app.core.config import Settings, get_settings
 from app.core.ids import new_payload_id
 from app.main import app
@@ -62,6 +67,8 @@ async def client(redis):
     app.state.redis = redis
     app.dependency_overrides[get_audit_service] = lambda: NullAuditService()
     app.dependency_overrides[get_settings] = lambda: Settings()
+    app.dependency_overrides[create_rate_limit] = lambda: None
+    app.dependency_overrides[retrieve_rate_limit] = lambda: None
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -69,6 +76,7 @@ async def client(redis):
         yield ac
 
     app.dependency_overrides.clear()
+    app.state.redis = None
 
 
 class TestAtomicBurn:

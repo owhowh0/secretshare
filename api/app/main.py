@@ -49,8 +49,11 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await redis.aclose()
+        app.state.redis = None
         if engine is not None:
             await dispose_engine(engine)
+        app.state.db_engine = None
+        app.state.db_session_factory = None
 
 
 app = FastAPI(
