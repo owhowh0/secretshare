@@ -66,10 +66,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // HTML documents are the only responses that carry inline scripts, so the
-    // per-request nonce is only needed here. Static assets under /_next/static
-    // get the constant headers from next.config.ts instead, and skipping them
-    // keeps those responses cacheable.
+    '/',
     {
       source: '/((?!_next/static|_next/image|favicon.ico).*)',
       missing: [

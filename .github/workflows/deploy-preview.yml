@@ -145,7 +145,7 @@ jobs:
             fi
 
             echo "=== 2. Testing Frontend HTML & Assets ==="
-            HTML_OUTPUT=$(curl -s -f -m 5 "http://127.0.0.1/pr-${PR_NUM}/" || {
+            HTML_OUTPUT=$(curl -s -f -L -m 5 "http://127.0.0.1/pr-${PR_NUM}/" || {
               echo "Error: curl failed to fetch /pr-${PR_NUM}/"
               curl -v -m 10 "http://127.0.0.1/pr-${PR_NUM}/" || true
               exit 1

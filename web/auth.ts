@@ -2,10 +2,9 @@ import NextAuth from "next-auth"
 import Keycloak from "next-auth/providers/keycloak"
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
-const authBasePath = BASE_PATH ? `${BASE_PATH}/api/auth` : "/api/auth"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  basePath: authBasePath,
+  basePath: "/api/auth",
   trustHost: true,
   providers: [
     Keycloak({
