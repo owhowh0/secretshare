@@ -19,7 +19,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         "",
       issuer:
         process.env.AUTH_KEYCLOAK_ISSUER ??
-        process.env.KEYCLOAK_ISSUER,
+        process.env.KEYCLOAK_ISSUER ??
+        `http://localhost${BASE_PATH}/keycloak/realms/secretshare`,
     }),
   ],
   callbacks: {

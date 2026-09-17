@@ -23,6 +23,8 @@ services:
         NEXT_PUBLIC_BASE_PATH: ""
         NEXT_PUBLIC_API_BASE: "/api"
     environment:
+      - NEXT_PUBLIC_BASE_PATH=
+      - NEXT_PUBLIC_API_BASE=/api
       - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
       - AUTH_TRUST_HOST=true
       - AUTH_URL=http://localhost:${TRAEFIK_WEB_PORT:-80}/api/auth
