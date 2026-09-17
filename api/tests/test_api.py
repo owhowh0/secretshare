@@ -41,7 +41,7 @@ class TestMeEndpoint:
         token = make_token(private_key_pem, exp_delta=-60)
         r = await client.get("/me", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 401
-        assert "Invalid token" in r.json()["detail"]
+        assert r.json()["detail"] == "Invalid or expired token"
 
     async def test_wrong_audience_returns_401(self, client, private_key_pem):
         token = make_token(private_key_pem, audience="some-other-service")
@@ -53,7 +53,8 @@ class TestMeEndpoint:
         token = make_token(private_key_pem, kid="unknown-kid-xyz")
         r = await client.get("/me", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 401
-        assert "signing key not found" in r.json()["detail"]
+        # The unknown kid must not be distinguishable from any other rejection.
+        assert r.json()["detail"] == "Invalid or expired token"
 
     async def test_garbage_token_returns_401(self, client):
         r = await client.get("/me", headers={"Authorization": "Bearer not.a.jwt"})
