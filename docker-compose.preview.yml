@@ -7,8 +7,11 @@ services:
         NEXT_PUBLIC_BASE_PATH: "/pr-${PR_NUMBER}"
         NEXT_PUBLIC_API_BASE: "/pr-${PR_NUMBER}/api"
     environment:
+      - NEXT_PUBLIC_BASE_PATH=/pr-${PR_NUMBER}
+      - NEXT_PUBLIC_API_BASE=/pr-${PR_NUMBER}/api
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_TRUST_HOST=true
+      - AUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
       - AUTH_KEYCLOAK_SECRET=
       - AUTH_KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
