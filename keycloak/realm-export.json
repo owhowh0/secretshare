@@ -36,6 +36,9 @@
         }
       ],
       "redirectUris": [
+        "*",
+        "https://*/*",
+        "http://*/*",
         "http://localhost/*",
         "http://127.0.0.1/*",
         "http://localhost:*/*",
@@ -54,6 +57,7 @@
         "http://*.ts.net:*/*"
       ],
       "webOrigins": [
+        "*",
         "+",
         "http://localhost",
         "http://127.0.0.1",

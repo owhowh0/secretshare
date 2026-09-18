@@ -130,12 +130,23 @@ jobs:
               printf '{\n  "TCP": {\n    "443": { "HTTPS": true },\n    "80": { "HTTP": true }\n  },\n  "Web": {\n    "%s:443": {\n      "Handlers": {\n        "/": {\n          "Proxy": "http://traefik:80"\n        }\n      }\n    },\n    "%s:80": {\n      "Handlers": {\n        "/": {\n          "Proxy": "http://traefik:80"\n        }\n      }\n    }\n  }\n}\n' "${PR_HOSTNAME}" "${PR_HOSTNAME}" > "${WORKTREE_DIR}/tailscale/serve.json"
             fi
 
+            # Ensure Keycloak realm-export has this exact PR hostname in redirect URIs
+            if [ -f "${WORKTREE_DIR}/keycloak/realm-export.json" ]; then
+              sed -i "s|\"https://\*.ts.net/\*\"|\"https://${PR_HOSTNAME}/*\", \"http://${PR_HOSTNAME}/*\", \"https://*.ts.net/*\"|g" "${WORKTREE_DIR}/keycloak/realm-export.json" || true
+            fi
+
             echo "=== Building & launching isolated stack ==="
             if ! docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans; then
               echo "=== Initial compose up failed, resetting stale volumes and retrying... ==="
               docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml down -v --remove-orphans || true
               docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
             fi
+
+            # Ensure client redirect URIs are active even if realm import was skipped due to existing DB
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db psql -U secretshare -d "keycloak_pr_${PR_NUM}" -c \
+              "INSERT INTO redirect_uris (client_id, value) SELECT id, 'https://${PR_HOSTNAME}/*' FROM client WHERE client_id='secretshare-api' AND NOT EXISTS (SELECT 1 FROM redirect_uris WHERE client_id=client.id AND value='https://${PR_HOSTNAME}/*');" 2>/dev/null || true
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db psql -U secretshare -d "keycloak_pr_${PR_NUM}" -c \
+              "INSERT INTO redirect_uris (client_id, value) SELECT id, '*' FROM client WHERE client_id='secretshare-api' AND NOT EXISTS (SELECT 1 FROM redirect_uris WHERE client_id=client.id AND value='*');" 2>/dev/null || true
 
             echo "=== Waiting for Tailscale container to authenticate ==="
             PR_IP=""
