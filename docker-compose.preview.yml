@@ -41,6 +41,7 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.service=pr-${PR_NUMBER}-web"
 
       - "traefik.http.middlewares.pr-${PR_NUMBER}-proto-header.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-proto-header.headers.customrequestheaders.X-Forwarded-Port=443"
       - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default
@@ -158,6 +159,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}
       KC_PROXY_HEADERS: "xforwarded"
+      KC_HOSTNAME_PORT: "443"
       KC_HOSTNAME_URL: "https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak"
       KC_HOSTNAME_ADMIN_URL: "https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak"
       KC_DB: postgres
