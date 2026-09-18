@@ -122,26 +122,13 @@ jobs:
               "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" "${AUTH_SEC}" "${AUTH_KEY}" "${PR_HOSTNAME}" > .env
             set -x
 
-            # Write Tailscale serve configuration for this PR hostname
+            # Ensure Tailscale serve configuration is customized for this PR hostname
             mkdir -p "${WORKTREE_DIR}/tailscale"
-            cat <<SERVE_EOF > "${WORKTREE_DIR}/tailscale/serve.json"
-{
-  "TCP": {
-    "443": {
-      "HTTPS": true
-    }
-  },
-  "Web": {
-    "${PR_HOSTNAME}:443": {
-      "Handlers": {
-        "/": {
-          "Proxy": "http://traefik:80"
-        }
-      }
-    }
-  }
-}
-SERVE_EOF
+            if [ -f "${WORKTREE_DIR}/tailscale/serve.json" ]; then
+              sed -i "s/\\\${TS_CERT_DOMAIN}/${PR_HOSTNAME}/g" "${WORKTREE_DIR}/tailscale/serve.json"
+            else
+              printf '{\n  "TCP": {\n    "443": { "HTTPS": true }\n  },\n  "Web": {\n    "%s:443": {\n      "Handlers": {\n        "/": {\n          "Proxy": "http://traefik:80"\n        }\n      }\n    }\n  }\n}\n' "${PR_HOSTNAME}" > "${WORKTREE_DIR}/tailscale/serve.json"
+            fi
 
             echo "=== Building & launching isolated stack ==="
             if ! docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans; then
