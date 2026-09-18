@@ -19,8 +19,7 @@ logger = logging.getLogger("secretshare.api")
 # Installed at import time so no request can be logged before it is in place.
 install_secret_path_redaction()
 
-default_root = f"/pr-{os.environ['PR_NUMBER']}/api" if os.getenv("PR_NUMBER") else "/api"
-root_path = os.getenv("API_ROOT_PATH", default_root)
+root_path = os.getenv("API_ROOT_PATH", "/api")
 
 
 @asynccontextmanager

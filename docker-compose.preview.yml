@@ -4,18 +4,18 @@ services:
       context: ./web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_BASE_PATH: "/pr-${PR_NUMBER}"
-        NEXT_PUBLIC_API_BASE: "/pr-${PR_NUMBER}/api"
+        NEXT_PUBLIC_BASE_PATH: ""
+        NEXT_PUBLIC_API_BASE: "/api"
     environment:
-      - NEXT_PUBLIC_BASE_PATH=/pr-${PR_NUMBER}
-      - NEXT_PUBLIC_API_BASE=/pr-${PR_NUMBER}/api
+      - NEXT_PUBLIC_BASE_PATH=
+      - NEXT_PUBLIC_API_BASE=/api
       - AUTH_SECRET=${AUTH_SECRET}
       - AUTH_TRUST_HOST=true
-      - AUTH_URL=http://staging-server/pr-${PR_NUMBER}/api/auth
+      - AUTH_URL=https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
       - AUTH_KEYCLOAK_SECRET=
-      - AUTH_KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
-      - KEYCLOAK_ISSUER=http://staging-server/pr-${PR_NUMBER}/keycloak/realms/secretshare
+      - AUTH_KEYCLOAK_ISSUER=https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak/realms/secretshare
+      - KEYCLOAK_ISSUER=https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak/realms/secretshare
       - KEYCLOAK_CLIENT_ID=secretshare-api
     extra_hosts:
       - "staging-server:host-gateway"
@@ -26,28 +26,22 @@ services:
           memory: 256M
     labels:
       - "traefik.enable=true"
-      # Redirect /pr-N to /pr-N/
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.rule=Path(`/pr-${PR_NUMBER}`)"
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.entrypoints=web"
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.priority=20"
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.service=pr-${PR_NUMBER}-web"
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.middlewares=pr-${PR_NUMBER}-redirect-slash"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-redirect-slash.redirectregex.regex=^.*(/pr-${PR_NUMBER})$$"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-redirect-slash.redirectregex.replacement=$${1}/"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-redirect-slash.redirectregex.permanent=true"
-
-      # Main web router
-      - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=PathPrefix(`/pr-${PR_NUMBER}`)"
+      # Main web router on PR subdomain
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.middlewares=pr-${PR_NUMBER}-proto-header"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
 
-      # NextAuth router: route /pr-N/api/auth to web instead of api (priority 150 > api 100)
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=PathPrefix(`/pr-${PR_NUMBER}/api/auth`)"
+      # NextAuth router: route /api/auth to web instead of api (priority 150 > api 100)
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.priority=150"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.middlewares=pr-${PR_NUMBER}-proto-header"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.service=pr-${PR_NUMBER}-web"
 
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-proto-header.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-proto-header.headers.customrequestheaders.X-Forwarded-Port=443"
       - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default
@@ -64,10 +58,10 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare_pr_${PR_NUMBER}}
       - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:6379/0}
       - PR_NUMBER=${PR_NUMBER}
-      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/pr-${PR_NUMBER}/keycloak}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080/keycloak}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
-      - API_ROOT_PATH=/pr-${PR_NUMBER}/api
+      - API_ROOT_PATH=/api
     deploy:
       resources:
         limits:
@@ -80,11 +74,11 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=PathPrefix(`/pr-${PR_NUMBER}/api`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`/api`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.priority=100"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-api-strip"
-      - "traefik.http.middlewares.pr-${PR_NUMBER}-api-strip.stripprefix.prefixes=/pr-${PR_NUMBER}/api"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-proto-header,pr-${PR_NUMBER}-api-strip"
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-api-strip.stripprefix.prefixes=/api"
       - "traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=8000"
     networks:
       - default
@@ -163,7 +157,11 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
-      KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/pr-${PR_NUMBER}/keycloak}
+      KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HOSTNAME_PORT: "443"
+      KC_HOSTNAME_URL: "https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak"
+      KC_HOSTNAME_ADMIN_URL: "https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak"
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER}}
       KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
@@ -183,16 +181,39 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=PathPrefix(`${KEYCLOAK_PATH:-/pr-${PR_NUMBER}/keycloak}`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`${KEYCLOAK_PATH:-/keycloak}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.priority=200"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.middlewares=pr-${PR_NUMBER}-proto-header"
       - "traefik.http.services.pr-${PR_NUMBER}-keycloak.loadbalancer.server.port=8080"
+    networks:
+      - default
+      - traefik-net
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: pr-${PR_NUMBER}
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_EXTRA_ARGS=--advertise-tags=tag:server
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_USERSPACE=false
+      - TS_SERVE_CONFIG=/config/serve.json
+    volumes:
+      - pr-ts-state:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     networks:
       - default
       - traefik-net
 
 volumes:
   pr-pgdata:
+  pr-ts-state:
 
 networks:
   default:

@@ -122,3 +122,21 @@ class TestCORS:
         assert r.status_code == 200
         assert r.headers.get("access-control-allow-origin") == origin
         assert "POST" in r.headers.get("access-control-allow-methods", "")
+
+
+# ---------------------------------------------------------------------------
+# Security Headers & Docs CSP
+# ---------------------------------------------------------------------------
+class TestSecurityHeaders:
+    async def test_normal_route_has_strict_csp(self, client):
+        r = await client.get("/health")
+        assert r.status_code == 200
+        assert r.headers.get("content-security-policy") == "default-src 'none'; frame-ancestors 'none'"
+
+    async def test_docs_route_allows_swagger_ui_assets(self, client):
+        r = await client.get("/docs")
+        assert r.status_code == 200
+        csp = r.headers.get("content-security-policy", "")
+        assert "https://cdn.jsdelivr.net" in csp
+        assert "'unsafe-inline'" in csp
+        assert "frame-ancestors 'none'" in csp

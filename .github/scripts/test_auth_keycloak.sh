@@ -12,9 +12,9 @@ TOKEN_FILE="${2:-}"
 echo "=== Testing Authentication & Keycloak Integration at ${BASE_URL} ==="
 
 echo "--- 1. Testing NextAuth Providers Endpoint ---"
-AUTH_PROVIDERS=$(curl -s -f -L -m 5 "${BASE_URL}/api/auth/providers" || {
+AUTH_PROVIDERS=$(curl -s -k -f -L -m 5 "${BASE_URL}/api/auth/providers" || {
   echo "Error: NextAuth /api/auth/providers failed"
-  curl -v -L -m 5 "${BASE_URL}/api/auth/providers" || true
+  curl -v -k -L -m 5 "${BASE_URL}/api/auth/providers" || true
   exit 1
 })
 echo "$AUTH_PROVIDERS" | grep -q 'keycloak' || {
@@ -24,9 +24,9 @@ echo "$AUTH_PROVIDERS" | grep -q 'keycloak' || {
 echo "-> NextAuth keycloak provider endpoint verified"
 
 echo "--- 2. Testing Keycloak OIDC Discovery Endpoint ---"
-OIDC_DISCOVERY=$(curl -s -f -m 5 "${BASE_URL}/keycloak/realms/${REALM}/.well-known/openid-configuration" || {
+OIDC_DISCOVERY=$(curl -s -k -f -m 5 "${BASE_URL}/keycloak/realms/${REALM}/.well-known/openid-configuration" || {
   echo "Error: Keycloak OIDC discovery request failed"
-  curl -v -m 5 "${BASE_URL}/keycloak/realms/${REALM}/.well-known/openid-configuration" || true
+  curl -v -k -m 5 "${BASE_URL}/keycloak/realms/${REALM}/.well-known/openid-configuration" || true
   exit 1
 })
 echo "$OIDC_DISCOVERY" | grep -q 'token_endpoint' || {
@@ -36,7 +36,7 @@ echo "$OIDC_DISCOVERY" | grep -q 'token_endpoint' || {
 echo "-> Keycloak OIDC discovery endpoint verified"
 
 echo "--- 3. Testing Keycloak Token Issuance (OAuth Password Grant) ---"
-KC_TOKEN_RESPONSE=$(curl -s -f -m 10 -X POST "${BASE_URL}/keycloak/realms/${REALM}/protocol/openid-connect/token" \
+KC_TOKEN_RESPONSE=$(curl -s -k -f -m 10 -X POST "${BASE_URL}/keycloak/realms/${REALM}/protocol/openid-connect/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "client_id=${CLIENT_ID}&grant_type=password&username=${TEST_USER}&password=${TEST_PASS}&scope=openid" || {
     echo "Error: Keycloak token endpoint POST failed"
@@ -55,10 +55,10 @@ if [ -n "${TOKEN_FILE}" ]; then
 fi
 
 echo "--- 4. Testing Protected /api/me Endpoint ---"
-ME_RESPONSE=$(curl -s -f -m 10 "${BASE_URL}/api/me" \
+ME_RESPONSE=$(curl -s -k -f -m 10 "${BASE_URL}/api/me" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" || {
     echo "Error: /api/me failed with valid token"
-    curl -v -m 10 "${BASE_URL}/api/me" -H "Authorization: Bearer ${ACCESS_TOKEN}" || true
+    curl -v -k -m 10 "${BASE_URL}/api/me" -H "Authorization: Bearer ${ACCESS_TOKEN}" || true
     exit 1
   })
 echo "$ME_RESPONSE" | grep -q "\"preferred_username\":\"${TEST_USER}\"" || {
@@ -67,13 +67,13 @@ echo "$ME_RESPONSE" | grep -q "\"preferred_username\":\"${TEST_USER}\"" || {
 }
 echo "-> Valid token accepted for user ${TEST_USER}"
 
-CODE_NO_AUTH=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/api/me")
+CODE_NO_AUTH=$(curl -s -k -o /dev/null -w "%{http_code}" "${BASE_URL}/api/me")
 [ "${CODE_NO_AUTH}" = "403" ] || {
   echo "Error: Expected 403 for unauthenticated /api/me, got ${CODE_NO_AUTH}"
   exit 1
 }
 
-CODE_BAD_AUTH=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer invalid.token" "${BASE_URL}/api/me")
+CODE_BAD_AUTH=$(curl -s -k -o /dev/null -w "%{http_code}" -H "Authorization: Bearer invalid.token" "${BASE_URL}/api/me")
 [ "${CODE_BAD_AUTH}" = "401" ] || {
   echo "Error: Expected 401 for invalid token on /api/me, got ${CODE_BAD_AUTH}"
   exit 1

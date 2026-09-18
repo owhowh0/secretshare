@@ -18,9 +18,9 @@ if [ "${CHECK_REDIRECT}" = "true" ] && [[ "${BASE_URL}" =~ /pr-[0-9]+$ ]]; then
 fi
 
 echo "--- Testing Frontend HTML Document ---"
-HTML_OUTPUT=$(curl -s -f -L -m 5 "${BASE_URL}/" || {
+HTML_OUTPUT=$(curl -s -k -f -L -m 5 "${BASE_URL}/" || {
   echo "Error: curl failed to fetch ${BASE_URL}/"
-  curl -v -m 10 "${BASE_URL}/" || true
+  curl -v -k -m 10 "${BASE_URL}/" || true
   exit 1
 })
 
@@ -38,9 +38,9 @@ NEXT_ASSET_PATH=$(echo "$HTML_OUTPUT" | grep -oE "(/pr-[0-9]+)?/_next/static/[^\
 echo "-> Found Next.js static asset: ${NEXT_ASSET_PATH}"
 
 ORIGIN=$(echo "${BASE_URL}" | grep -oE "^https?://[^/]+")
-curl -s -f -m 5 "${ORIGIN}${NEXT_ASSET_PATH}" >/dev/null || {
+curl -s -k -f -m 5 "${ORIGIN}${NEXT_ASSET_PATH}" >/dev/null || {
   echo "Error: Failed to fetch Next.js static asset ${ORIGIN}${NEXT_ASSET_PATH}"
-  curl -v -m 5 "${ORIGIN}${NEXT_ASSET_PATH}" || true
+  curl -v -k -m 5 "${ORIGIN}${NEXT_ASSET_PATH}" || true
   exit 1
 }
 
