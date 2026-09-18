@@ -30,14 +30,17 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.middlewares=pr-${PR_NUMBER}-proto-header"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
 
       # NextAuth router: route /api/auth to web instead of api (priority 150 > api 100)
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.priority=150"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.middlewares=pr-${PR_NUMBER}-proto-header"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.service=pr-${PR_NUMBER}-web"
 
+      - "traefik.http.middlewares.pr-${PR_NUMBER}-proto-header.headers.customrequestheaders.X-Forwarded-Proto=https"
       - "traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000"
     networks:
       - default
@@ -73,7 +76,7 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`/api`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.priority=100"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-api-strip"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-proto-header,pr-${PR_NUMBER}-api-strip"
       - "traefik.http.middlewares.pr-${PR_NUMBER}-api-strip.stripprefix.prefixes=/api"
       - "traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=8000"
     networks:
@@ -154,6 +157,9 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}
+      KC_PROXY_HEADERS: "xforwarded"
+      KC_HOSTNAME_URL: "https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak"
+      KC_HOSTNAME_ADMIN_URL: "https://${PR_HOSTNAME:-pr-${PR_NUMBER}.staging-server}/keycloak"
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER}}
       KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
@@ -176,6 +182,7 @@ services:
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`${KEYCLOAK_PATH:-/keycloak}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.priority=200"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.middlewares=pr-${PR_NUMBER}-proto-header"
       - "traefik.http.services.pr-${PR_NUMBER}-keycloak.loadbalancer.server.port=8080"
     networks:
       - default

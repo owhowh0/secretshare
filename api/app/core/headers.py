@@ -21,6 +21,15 @@ BASE_SECURITY_HEADERS = {
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
 }
 
+DOCS_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "img-src 'self' data: https://fastapi.tiangolo.com; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'"
+)
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
@@ -33,6 +42,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
+        is_docs = (
+            request.url.path in ("/docs", "/redoc", "/openapi.json")
+            or "/docs" in request.url.path
+            or "/redoc" in request.url.path
+        )
+
         for header, value in BASE_SECURITY_HEADERS.items():
-            response.headers.setdefault(header, value)
+            if header == "Content-Security-Policy" and is_docs:
+                response.headers.setdefault(header, DOCS_CSP)
+            else:
+                response.headers.setdefault(header, value)
         return response
