@@ -137,6 +137,29 @@ jobs:
               docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
             fi
 
+            echo "=== Waiting for Tailscale container to authenticate ==="
+            PR_IP=""
+            for i in $(seq 1 20); do
+              STATUS=$(docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale status --json 2>/dev/null | grep -o '"BackendState":"[^"]*' | cut -d'"' -f4 || true)
+              if [ "$STATUS" = "Running" ]; then
+                PR_IP=$(docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale ip -4 2>/dev/null | tr -d '\r\n' || true)
+                echo "-> Tailscale node is Running with IP: ${PR_IP}"
+                break
+              fi
+              echo "Waiting for Tailscale authentication... attempt $i/20 (status: ${STATUS:-connecting})"
+              sleep 2
+            done
+
+            echo "=== Activating Tailscale Serve on port 443 ==="
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale serve --bg --https=443 / http://traefik:80 || true
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale serve status || true
+
+            if [ -n "${PR_IP}" ]; then
+              sed -i "/ ${PR_HOSTNAME}$/d" /etc/hosts || true
+              echo "${PR_IP} ${PR_HOSTNAME}" >> /etc/hosts
+              echo "-> Added ${PR_IP} ${PR_HOSTNAME} to /etc/hosts for local runner resolution"
+            fi
+
             echo "=== Verifying preview deployment health & routing at ${PREVIEW_URL} ==="
             bash "${WORKTREE_DIR}/.github/scripts/wait_services_ready.sh" "${PREVIEW_URL}" "pr-${PR_NUM}" "docker-compose.preview.yml"
 
@@ -246,6 +269,7 @@ jobs:
             WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
 
             echo "=== Tearing down PR ${PR_NUM} stack and volumes ==="
+            sed -i "/ pr-${PR_NUM}\./d" /etc/hosts || true
             if [ -d "${WORKTREE_DIR}" ]; then
               PR_NUMBER="${PR_NUM}" docker compose -p "pr-${PR_NUM}" -f "${WORKTREE_DIR}/docker-compose.preview.yml" down -v --remove-orphans || true
               cd "${REPO_DIR}"

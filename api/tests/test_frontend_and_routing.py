@@ -106,7 +106,7 @@ class TestPreviewSubpathResolutionEdgeCases:
         web_labels = data.get("services", {}).get("web", {}).get("labels", [])
         labels_text = "\n".join(web_labels)
 
-        assert "traefik.http.routers.pr-${PR_NUMBER}-web.rule=HostRegexp(`^pr-${PR_NUMBER}\\..*$$`)" in labels_text, (
-            "docker-compose.preview.yml must define HostRegexp router for pr-${PR_NUMBER} subdomain"
+        assert "Host(`${PR_HOSTNAME}`)" in labels_text, (
+            "docker-compose.preview.yml must define Host router for PR_HOSTNAME subdomain"
         )
         assert "tailscale" in data.get("services", {}), "docker-compose.preview.yml must define tailscale service"

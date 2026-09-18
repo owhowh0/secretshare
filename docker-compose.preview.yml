@@ -27,13 +27,13 @@ services:
     labels:
       - "traefik.enable=true"
       # Main web router on PR subdomain
-      - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=HostRegexp(`^pr-${PR_NUMBER}\\..*$$`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web.rule=Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.priority=10"
       - "traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web"
 
       # NextAuth router: route /api/auth to web instead of api (priority 150 > api 100)
-      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=HostRegexp(`^pr-${PR_NUMBER}\\..*$$`) && PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`/api/auth`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.priority=150"
       - "traefik.http.routers.pr-${PR_NUMBER}-web-auth.service=pr-${PR_NUMBER}-web"
@@ -70,7 +70,7 @@ services:
         condition: service_healthy
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=HostRegexp(`^pr-${PR_NUMBER}\\..*$$`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-api.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`/api`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.priority=100"
       - "traefik.http.routers.pr-${PR_NUMBER}-api.middlewares=pr-${PR_NUMBER}-api-strip"
@@ -173,7 +173,7 @@ services:
       start_period: 60s
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=HostRegexp(`^pr-${PR_NUMBER}\\..*$$`) && PathPrefix(`${KEYCLOAK_PATH:-/keycloak}`)"
+      - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.rule=(Host(`${PR_HOSTNAME}`) || Host(`pr-${PR_NUMBER}.staging-server`)) && PathPrefix(`${KEYCLOAK_PATH:-/keycloak}`)"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.entrypoints=web"
       - "traefik.http.routers.pr-${PR_NUMBER}-keycloak.priority=200"
       - "traefik.http.services.pr-${PR_NUMBER}-keycloak.loadbalancer.server.port=8080"
@@ -188,7 +188,7 @@ services:
       - TS_AUTHKEY=${TS_AUTHKEY}
       - TS_EXTRA_ARGS=--advertise-tags=tag:server
       - TS_STATE_DIR=/var/lib/tailscale
-      - TS_USERSPACE=true
+      - TS_USERSPACE=false
       - TS_SERVE_CONFIG=/config/serve.json
     volumes:
       - pr-ts-state:/var/lib/tailscale
