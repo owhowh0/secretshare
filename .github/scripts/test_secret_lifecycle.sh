@@ -23,7 +23,7 @@ if [ -z "${ACCESS_TOKEN}" ]; then
   TEST_USER="${TEST_USER_USERNAME:-testuser}"
   TEST_PASS="${TEST_USER_PASSWORD:-testpassword123}"
   echo "Acquiring access token for authenticated secret test..."
-  KC_TOKEN_RESPONSE=$(curl -s -f -m 10 -X POST "${BASE_URL}/keycloak/realms/${REALM}/protocol/openid-connect/token" \
+  KC_TOKEN_RESPONSE=$(curl -s -k -f -m 10 -X POST "${BASE_URL}/keycloak/realms/${REALM}/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "client_id=${CLIENT_ID}&grant_type=password&username=${TEST_USER}&password=${TEST_PASS}&scope=openid" || {
       echo "Error: Failed to obtain token from Keycloak for secret testing"
@@ -33,7 +33,7 @@ if [ -z "${ACCESS_TOKEN}" ]; then
 fi
 
 echo "--- 1. Testing Authenticated Secret Lifecycle ---"
-AUTH_PAYLOAD_ID=$(curl -s -f -m 10 -X POST "${BASE_URL}/api/secrets" \
+AUTH_PAYLOAD_ID=$(curl -s -k -f -m 10 -X POST "${BASE_URL}/api/secrets" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -d '{"ciphertext": "authenticated-e2e-smoke-test"}' | grep -o '"payload_id":"[^"]*' | cut -d'"' -f4)
@@ -44,7 +44,7 @@ if [ -z "${AUTH_PAYLOAD_ID}" ]; then
 fi
 echo "-> Created authenticated secret: ${AUTH_PAYLOAD_ID}"
 
-AUTH_RETRIEVED=$(curl -s -f -m 10 -X POST "${BASE_URL}/api/secrets/reveal" \
+AUTH_RETRIEVED=$(curl -s -k -f -m 10 -X POST "${BASE_URL}/api/secrets/reveal" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -d "{\"payload_id\": \"${AUTH_PAYLOAD_ID}\"}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
@@ -55,7 +55,7 @@ if [ "${AUTH_RETRIEVED}" != "authenticated-e2e-smoke-test" ]; then
 fi
 echo "-> Successfully retrieved authenticated secret"
 
-AUTH_BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/secrets/reveal" \
+AUTH_BURN_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/secrets/reveal" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -d "{\"payload_id\": \"${AUTH_PAYLOAD_ID}\"}")
@@ -67,7 +67,7 @@ AUTH_BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api
 echo "-> Authenticated secret burned successfully (404 on second reveal)"
 
 echo "--- 2. Testing Anonymous Secret Lifecycle ---"
-PAYLOAD_ID=$(curl -s -f -m 10 -X POST "${BASE_URL}/api/secrets" \
+PAYLOAD_ID=$(curl -s -k -f -m 10 -X POST "${BASE_URL}/api/secrets" \
   -H "Content-Type: application/json" \
   -d '{"ciphertext": "anonymous-e2e-smoke-test"}' | grep -o '"payload_id":"[^"]*' | cut -d'"' -f4)
 
@@ -77,7 +77,7 @@ if [ -z "${PAYLOAD_ID}" ]; then
 fi
 echo "-> Created anonymous secret: ${PAYLOAD_ID}"
 
-RETRIEVED=$(curl -s -f -m 10 -X POST "${BASE_URL}/api/secrets/reveal" \
+RETRIEVED=$(curl -s -k -f -m 10 -X POST "${BASE_URL}/api/secrets/reveal" \
   -H "Content-Type: application/json" \
   -d "{\"payload_id\": \"${PAYLOAD_ID}\"}" | grep -o '"ciphertext":"[^"]*' | cut -d'"' -f4)
 
@@ -87,7 +87,7 @@ if [ "${RETRIEVED}" != "anonymous-e2e-smoke-test" ]; then
 fi
 echo "-> Successfully retrieved anonymous secret"
 
-BURN_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/secrets/reveal" \
+BURN_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/secrets/reveal" \
   -H "Content-Type: application/json" \
   -d "{\"payload_id\": \"${PAYLOAD_ID}\"}")
 

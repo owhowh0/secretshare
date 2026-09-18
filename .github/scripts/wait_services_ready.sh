@@ -11,9 +11,9 @@ ATTEMPTS=0
 READY=0
 while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
   ATTEMPTS=$((ATTEMPTS + 1))
-  WEB_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "${BASE_URL}/" || echo "CURL_ERR_$?")
-  API_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "${BASE_URL}/api/health" || echo "CURL_ERR_$?")
-  KC_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 5 "${BASE_URL}/keycloak/realms/secretshare" || echo "CURL_ERR_$?")
+  WEB_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" -m 5 "${BASE_URL}/" || echo "CURL_ERR_$?")
+  API_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" -m 5 "${BASE_URL}/api/health" || echo "CURL_ERR_$?")
+  KC_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" -m 5 "${BASE_URL}/keycloak/realms/secretshare" || echo "CURL_ERR_$?")
   echo "[$(date +'%T')] [Attempt ${ATTEMPTS}/${MAX_ATTEMPTS}] Web: ${WEB_CODE} | API: ${API_CODE} | Keycloak: ${KC_CODE}"
   if [ "${WEB_CODE}" = "200" ] && [ "${API_CODE}" = "200" ] && [ "${KC_CODE}" = "200" ]; then
     echo "=== All services responded with 200 OK! ==="

@@ -97,8 +97,8 @@ class TestPreviewSubpathResolutionEdgeCases:
         match = pattern.match("/")
         assert match is None
 
-    def test_docker_compose_preview_has_slash_redirect(self):
-        """Ensures docker-compose.preview.yml configures Traefik to redirect /pr-N to /pr-N/."""
+    def test_docker_compose_preview_subdomain_routing(self):
+        """Ensures docker-compose.preview.yml configures Traefik with subdomain host routing and tailscale."""
         assert DOCKER_COMPOSE_PREVIEW.is_file()
         content = DOCKER_COMPOSE_PREVIEW.read_text(encoding="utf-8")
         data = yaml.safe_load(content)
@@ -106,7 +106,7 @@ class TestPreviewSubpathResolutionEdgeCases:
         web_labels = data.get("services", {}).get("web", {}).get("labels", [])
         labels_text = "\n".join(web_labels)
 
-        assert "traefik.http.routers.pr-${PR_NUMBER}-web-redirect.rule=Path(`/pr-${PR_NUMBER}`)" in labels_text, (
-            "docker-compose.preview.yml must define web-redirect router for Path(`/pr-${PR_NUMBER}`)"
+        assert "traefik.http.routers.pr-${PR_NUMBER}-web.rule=HostRegexp(`^pr-${PR_NUMBER}\\..*$$`)" in labels_text, (
+            "docker-compose.preview.yml must define HostRegexp router for pr-${PR_NUMBER} subdomain"
         )
-        assert "redirectregex" in labels_text, "docker-compose.preview.yml must define redirectregex middleware"
+        assert "tailscale" in data.get("services", {}), "docker-compose.preview.yml must define tailscale service"

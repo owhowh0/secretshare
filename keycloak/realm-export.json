@@ -45,14 +45,23 @@
         "http://staging-server/*",
         "http://staging-server:*/*",
         "http://*.staging-server/*",
-        "http://*.staging-server:*/*"
+        "http://*.staging-server:*/*",
+        "https://*.staging-server/*",
+        "https://*.staging-server:*/*",
+        "https://*.ts.net/*",
+        "https://*.ts.net:*/*",
+        "http://*.ts.net/*",
+        "http://*.ts.net:*/*"
       ],
       "webOrigins": [
+        "+",
         "http://localhost",
         "http://127.0.0.1",
         "http://app.localhost",
         "http://staging-server",
-        "http://*.staging-server"
+        "http://*.staging-server",
+        "https://*.staging-server",
+        "https://*.ts.net"
       ]
     }
   ],

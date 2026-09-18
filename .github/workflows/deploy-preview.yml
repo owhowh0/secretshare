@@ -29,15 +29,32 @@ jobs:
           tags: tag:ci
 
       - name: Deploy Preview Stack via Tailscale SSH
+        id: deploy
         env:
           PR_NUM: ${{ github.event.number }}
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
         run: |
-          tailscale ssh root@staging-server "bash -s" << 'EOF'
+          TAILNET_NAME=$(tailscale status --json 2>/dev/null | jq -r '.MagicDNSSuffix // .CurrentTailnet.MagicDNSSuffix // empty' || true)
+          if [ -z "${TAILNET_NAME}" ]; then
+            TAILNET_NAME=$(tailscale status 2>/dev/null | grep -oE '[a-zA-Z0-9.-]+\.ts\.net' | head -n1 | sed -E 's/^[a-zA-Z0-9_-]+\.//' || true)
+          fi
+          if [ -z "${TAILNET_NAME}" ]; then
+            TAILNET_NAME="ts.net"
+          fi
+          PR_HOSTNAME="pr-${PR_NUM}.${TAILNET_NAME}"
+          PREVIEW_URL="https://${PR_HOSTNAME}"
+
+          echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
+          echo "pr_hostname=${PR_HOSTNAME}" >> "$GITHUB_OUTPUT"
+
+          tailscale ssh root@staging-server "PR_HOSTNAME='${PR_HOSTNAME}' TS_AUTHKEY='${TS_AUTHKEY}' bash -s" << 'EOF'
             set -euxo pipefail
             trap 'echo "!!! DEPLOYMENT FAILED AT LINE ${LINENO} (exit code: $?) !!!"' ERR
             PR_NUM="${{ github.event.number }}"
             REPO_DIR="/opt/secretshare"
             WORKTREE_DIR="${REPO_DIR}/worktrees/pr-${PR_NUM}"
+            PR_HOSTNAME="${PR_HOSTNAME}"
+            PREVIEW_URL="https://${PR_HOSTNAME}"
 
             echo "=== Ensuring base traefik router exists ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
@@ -84,11 +101,47 @@ jobs:
             PR_SECRET="${PR_SECRET:-$(openssl rand -hex 16)}"
             KC_SECRET="${KC_SECRET:-$(openssl rand -hex 16)}"
             AUTH_SEC="${AUTH_SEC:-$(openssl rand -hex 32)}"
+
+            # Resolve TS_AUTHKEY: prefer environment secret, fallback to host master .env
+            set +x
+            if [ -n "${TS_AUTHKEY:-}" ]; then
+              AUTH_KEY="${TS_AUTHKEY}"
+            elif [ -f "${REPO_DIR}/.env" ]; then
+              AUTH_KEY=$(grep '^TS_AUTHKEY=' "${REPO_DIR}/.env" | cut -d= -f2- || true)
+            else
+              AUTH_KEY=""
+            fi
+
             export PR_NUMBER="${PR_NUM}"
             export POSTGRES_PASSWORD="${PR_SECRET}"
             export KEYCLOAK_ADMIN_PASSWORD="${KC_SECRET}"
             export AUTH_SECRET="${AUTH_SEC}"
-            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\nAUTH_SECRET=%s\n" "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" "${AUTH_SEC}" > .env
+            export TS_AUTHKEY="${AUTH_KEY}"
+            export PR_HOSTNAME="${PR_HOSTNAME}"
+            printf "PR_NUMBER=%s\nPOSTGRES_PASSWORD=%s\nKEYCLOAK_ADMIN_PASSWORD=%s\nAUTH_SECRET=%s\nTS_AUTHKEY=%s\nPR_HOSTNAME=%s\n" \
+              "${PR_NUM}" "${PR_SECRET}" "${KC_SECRET}" "${AUTH_SEC}" "${AUTH_KEY}" "${PR_HOSTNAME}" > .env
+            set -x
+
+            # Write Tailscale serve configuration for this PR hostname
+            mkdir -p "${WORKTREE_DIR}/tailscale"
+            cat <<SERVE_EOF > "${WORKTREE_DIR}/tailscale/serve.json"
+{
+  "TCP": {
+    "443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "${PR_HOSTNAME}:443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://traefik:80"
+        }
+      }
+    }
+  }
+}
+SERVE_EOF
 
             echo "=== Building & launching isolated stack ==="
             if ! docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans; then
@@ -97,32 +150,61 @@ jobs:
               docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml up -d --build --remove-orphans
             fi
 
-            echo "=== Verifying preview deployment health & routing ==="
-            bash "${WORKTREE_DIR}/.github/scripts/wait_services_ready.sh" "http://127.0.0.1/pr-${PR_NUM}" "pr-${PR_NUM}" "docker-compose.preview.yml"
+            echo "=== Verifying preview deployment health & routing at ${PREVIEW_URL} ==="
+            bash "${WORKTREE_DIR}/.github/scripts/wait_services_ready.sh" "${PREVIEW_URL}" "pr-${PR_NUM}" "docker-compose.preview.yml"
 
             echo "=== Running Preview E2E Test Suite ==="
-            bash "${WORKTREE_DIR}/.github/scripts/test_web_routing.sh" "http://127.0.0.1/pr-${PR_NUM}" true
-            bash "${WORKTREE_DIR}/.github/scripts/test_api_docs.sh" "http://127.0.0.1/pr-${PR_NUM}"
-            bash "${WORKTREE_DIR}/.github/scripts/test_auth_keycloak.sh" "http://127.0.0.1/pr-${PR_NUM}" "${WORKTREE_DIR}/.token_tmp"
-            bash "${WORKTREE_DIR}/.github/scripts/test_secret_lifecycle.sh" "http://127.0.0.1/pr-${PR_NUM}" "${WORKTREE_DIR}/.token_tmp"
+            bash "${WORKTREE_DIR}/.github/scripts/test_web_routing.sh" "${PREVIEW_URL}" false
+            bash "${WORKTREE_DIR}/.github/scripts/test_api_docs.sh" "${PREVIEW_URL}"
+            bash "${WORKTREE_DIR}/.github/scripts/test_auth_keycloak.sh" "${PREVIEW_URL}" "${WORKTREE_DIR}/.token_tmp"
+            bash "${WORKTREE_DIR}/.github/scripts/test_secret_lifecycle.sh" "${PREVIEW_URL}" "${WORKTREE_DIR}/.token_tmp"
             rm -f "${WORKTREE_DIR}/.token_tmp"
 
             echo "=== Preview deployment and all verification tests passed successfully! ==="
           EOF
 
+      - name: Publish Preview Summary to Pipeline
+        if: success()
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+          PR_HOSTNAME: ${{ steps.deploy.outputs.pr_hostname }}
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          # 🚀 Ephemeral Preview Deployed
+
+          | Service | Direct Link |
+          | :--- | :--- |
+          | **Web Application** | [${PREVIEW_URL}](${PREVIEW_URL}) |
+          | **Swagger API Docs** | [${PREVIEW_URL}/api/docs](${PREVIEW_URL}/api/docs) |
+          | **API Health Status** | [${PREVIEW_URL}/api/health](${PREVIEW_URL}/api/health) |
+          | **Keycloak Admin Console** | [${PREVIEW_URL}/keycloak](${PREVIEW_URL}/keycloak) |
+
+          **OAuth Test Credentials**: \`testuser\` / \`testpassword123\` (Realm: \`secretshare\`, Client: \`secretshare-api\`)  
+          🔒 *Secured with Tailscale & Valid Let's Encrypt HTTPS (WebAuthn & Passkeys Enabled)*
+          EOF
+
+          echo "================================================================================"
+          echo "  🚀 PREVIEW ENVIRONMENT URL: ${PREVIEW_URL}"
+          echo "  📖 API SWAGGER DOCS:        ${PREVIEW_URL}/api/docs"
+          echo "  🔑 KEYCLOAK ADMIN CONSOLE:  ${PREVIEW_URL}/keycloak"
+          echo "================================================================================"
+
       - name: Comment Preview URL on PR
         uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
         with:
           script: |
             const prNumber = context.issue.number;
-            const webUrl = `http://staging-server/pr-${prNumber}`;
-            const apiDocsUrl = `http://staging-server/pr-${prNumber}/api/docs`;
-            const healthUrl = `http://staging-server/pr-${prNumber}/api/health`;
-            const keycloakUrl = `http://staging-server/pr-${prNumber}/keycloak`;
+            const previewUrl = process.env.PREVIEW_URL;
+            const webUrl = `${previewUrl}`;
+            const apiDocsUrl = `${previewUrl}/api/docs`;
+            const healthUrl = `${previewUrl}/api/health`;
+            const keycloakUrl = `${previewUrl}/keycloak`;
             const commentIdentifier = "<!-- preview-deployment-comment -->";
             const body = [
               commentIdentifier,
-              "### 🚀 Preview Environment Ready",
+              "### 🚀 Preview Environment Ready (HTTPS & Subdomain)",
               "",
               `- **Web App**: [${webUrl}](${webUrl})`,
               `- **API Docs / Swagger**: [${apiDocsUrl}](${apiDocsUrl})`,
@@ -130,7 +212,7 @@ jobs:
               `- **Keycloak Admin Console**: [${keycloakUrl}](${keycloakUrl}) — user: \`admin\``,
               `- **OAuth Test User**: \`testuser\` / \`testpassword123\` (Realm: \`secretshare\`, Client: \`secretshare-api\`)`,
               "",
-              "> *Accessible to team members on Tailscale.*",
+              "> *Secured with Tailscale & Valid Let's Encrypt HTTPS (WebAuthn Passkeys Supported).* ",
             ].join("\n");
 
             const { data: comments } = await github.rest.issues.listComments({
