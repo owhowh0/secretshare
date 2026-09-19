@@ -37,8 +37,11 @@ class Settings(BaseSettings):
     # Audit
     audit_enabled: bool = True
 
-    # Secrets. A secret expires on its own after this long if it is never read.
+    # Secrets. A secret expires on its own after secret_ttl_seconds if it is
+    # never read; a client may ask for any lifetime within the min/max bounds.
     secret_ttl_seconds: int = Field(default=600, gt=0)
+    secret_ttl_min_seconds: int = Field(default=300, gt=0)  # 5 minutes
+    secret_ttl_max_seconds: int = Field(default=86400, gt=0)  # 24 hours
 
     # Payload limits. 64 KB per CLAUDE.md §7; the relay stays blind to the
     # envelope's contents, so total size is the only thing it may judge.
@@ -62,6 +65,19 @@ class Settings(BaseSettings):
         if self.pr_number is not None:
             return f"/pr-{self.pr_number}/api"
         return "/api"
+
+    @model_validator(mode="after")
+    def _check_ttl_bounds(self) -> "Settings":
+        if not (
+            self.secret_ttl_min_seconds
+            <= self.secret_ttl_seconds
+            <= self.secret_ttl_max_seconds
+        ):
+            raise ValueError(
+                "secret TTL bounds must satisfy "
+                "secret_ttl_min_seconds <= secret_ttl_seconds <= secret_ttl_max_seconds"
+            )
+        return self
 
     @model_validator(mode="after")
     def _require_production_dependencies(self) -> "Settings":

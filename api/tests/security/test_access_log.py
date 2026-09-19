@@ -14,6 +14,7 @@ from app.api.routes.secrets import get_audit_service, get_secret_service
 from app.core.ids import new_payload_id
 from app.core.logging_filters import RedactSecretPaths, install_secret_path_redaction
 from app.main import app
+from tests.fakes import make_secret_service
 from fastapi.testclient import TestClient
 
 CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
@@ -22,19 +23,6 @@ CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
 class NullAuditService:
     async def record(self, *args, **kwargs) -> None:
         return None
-
-
-class FakeSecretService:
-    def __init__(self) -> None:
-        self.payloads: dict[str, str] = {}
-
-    async def create_secret(self, ciphertext: str) -> str:
-        payload_id = new_payload_id()
-        self.payloads[payload_id] = ciphertext
-        return payload_id
-
-    async def retrieve_secret(self, payload_id: str) -> str | None:
-        return self.payloads.pop(payload_id, None)
 
 
 class FakeRedis:
@@ -56,7 +44,7 @@ class FakeRedis:
 
 @pytest.fixture
 def client():
-    secrets = FakeSecretService()
+    secrets = make_secret_service()
     app.dependency_overrides[get_secret_service] = lambda: secrets
     app.dependency_overrides[get_audit_service] = lambda: NullAuditService()
 

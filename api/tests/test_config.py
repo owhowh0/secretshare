@@ -25,6 +25,8 @@ _SETTINGS_ENV = [
     "REDIS_URL",
     "AUDIT_ENABLED",
     "SECRET_TTL_SECONDS",
+    "SECRET_TTL_MIN_SECONDS",
+    "SECRET_TTL_MAX_SECONDS",
     "MAX_PAYLOAD_BYTES",
     "RATE_LIMIT_WINDOW_SECONDS",
     "CREATE_RATE_LIMIT",
@@ -51,6 +53,8 @@ class TestDefaults:
 
         assert settings.environment == "development"
         assert settings.secret_ttl_seconds == 600
+        assert settings.secret_ttl_min_seconds == 300
+        assert settings.secret_ttl_max_seconds == 86400
         assert settings.max_payload_bytes == 65536
         assert settings.rate_limit_window_seconds == 60
         assert settings.create_rate_limit == 10
@@ -63,7 +67,7 @@ class TestDefaults:
 
 class TestEnvironmentLoading:
     def test_values_come_from_environment(self, clean_env):
-        clean_env.setenv("SECRET_TTL_SECONDS", "120")
+        clean_env.setenv("SECRET_TTL_SECONDS", "420")
         clean_env.setenv("CREATE_RATE_LIMIT", "3")
         clean_env.setenv("REDIS_URL", "redis://cache:6379/2")
         clean_env.setenv("AUDIT_ENABLED", "false")
@@ -71,7 +75,7 @@ class TestEnvironmentLoading:
 
         settings = _settings()
 
-        assert settings.secret_ttl_seconds == 120
+        assert settings.secret_ttl_seconds == 420
         assert settings.create_rate_limit == 3
         assert settings.redis_url == "redis://cache:6379/2"
         assert settings.audit_enabled is False
@@ -113,6 +117,28 @@ class TestValidation:
 
         with pytest.raises(ValidationError):
             _settings()
+
+
+class TestTtlBounds:
+    def test_default_outside_bounds_is_rejected(self, clean_env):
+        with pytest.raises(ValidationError, match="secret TTL bounds"):
+            _settings(secret_ttl_seconds=100)
+
+    def test_min_above_max_is_rejected(self, clean_env):
+        with pytest.raises(ValidationError, match="secret TTL bounds"):
+            _settings(
+                secret_ttl_min_seconds=1000,
+                secret_ttl_seconds=1000,
+                secret_ttl_max_seconds=500,
+            )
+
+    def test_bounds_from_environment(self, clean_env):
+        clean_env.setenv("SECRET_TTL_MIN_SECONDS", "60")
+        clean_env.setenv("SECRET_TTL_MAX_SECONDS", "3600")
+
+        settings = _settings()
+
+        assert (settings.secret_ttl_min_seconds, settings.secret_ttl_max_seconds) == (60, 3600)
 
 
 class TestRootPath:
@@ -216,11 +242,11 @@ def make_client():
 
 class TestRoutesUseSettings:
     def test_secret_ttl_comes_from_settings(self, make_client):
-        client, redis = make_client(_settings(secret_ttl_seconds=123))
+        client, redis = make_client(_settings(secret_ttl_seconds=450))
 
         payload_id = client.post("/secrets", json={"ciphertext": "abc"}).json()["payload_id"]
 
-        assert redis.expiries[f"s:{payload_id}"] == 123
+        assert redis.expiries[f"s:{payload_id}"] == 450
 
     def test_create_rate_limit_comes_from_settings(self, make_client):
         client, redis = make_client(
