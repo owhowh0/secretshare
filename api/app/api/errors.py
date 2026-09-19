@@ -1,6 +1,8 @@
-"""HTTP mapping for the secret domain exceptions."""
+"""HTTP mapping for the secret domain exceptions and request validation errors."""
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
 
 from app.services.exceptions import (
@@ -42,7 +44,29 @@ async def _store_unavailable(
     )
 
 
+# Keys FastAPI's default 422 body carries per error. "input" is left out: it
+# echoes the rejected value back, which for POST /secrets is up to 64 KB of the
+# caller's ciphertext — and for a bad reveal, a payload id.
+_VALIDATION_ERROR_KEYS = ("type", "loc", "msg", "ctx")
+
+
+async def _request_validation(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    errors = [
+        {key: error[key] for key in _VALIDATION_ERROR_KEYS if key in error}
+        for error in exc.errors()
+    ]
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        # A custom validator's ValueError sits in ctx["error"]; its message is
+        # ours (never the input), so render it instead of an empty object.
+        content={"detail": jsonable_encoder(errors, custom_encoder={Exception: str})},
+    )
+
+
 def register_exception_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(RequestValidationError, _request_validation)
     app.add_exception_handler(SecretNotFoundError, _secret_not_found)
     app.add_exception_handler(InvalidSecretTTLError, _invalid_ttl)
     app.add_exception_handler(SecretStoreUnavailableError, _store_unavailable)

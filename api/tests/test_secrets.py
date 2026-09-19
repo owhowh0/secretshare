@@ -338,3 +338,36 @@ class TestInvalidTtlHandler:
         assert response.json() == {"detail": "ttl_seconds must be between 300 and 900"}
         assert store.payloads == {}
         assert audit.events == []
+
+
+class TestValidationErrorsDoNotEchoInput:
+    def test_rejected_ciphertext_is_not_echoed(self, client):
+        text = "é" * (MAX_CIPHERTEXT_BYTES // 2 + 200)
+        body = json.dumps({"ciphertext": text}, ensure_ascii=False).encode("utf-8")
+
+        response = client.post(
+            "/secrets", content=body, headers={"content-type": "application/json"}
+        )
+
+        assert response.status_code == 422
+        assert "éééé" not in response.text
+        [error] = response.json()["detail"]
+        assert "input" not in error
+        assert f"exceeds {MAX_CIPHERTEXT_BYTES} bytes" in error["ctx"]["error"]
+
+    def test_rejected_payload_id_is_not_echoed(self, client):
+        payload_id = "X" * 200  # over the 128-character cap
+
+        response = client.post("/secrets/reveal", json={"payload_id": payload_id})
+
+        assert response.status_code == 422
+        assert payload_id not in response.text
+
+    def test_error_keeps_location_message_and_bounds(self, client):
+        response = _create(client, ttl_seconds=MAX_TTL_SECONDS + 1)
+
+        [error] = response.json()["detail"]
+        assert error["loc"] == ["body", "ttl_seconds"]
+        assert error["type"] == "less_than_equal"
+        assert error["ctx"] == {"le": MAX_TTL_SECONDS}
+        assert "input" not in error
