@@ -1,32 +1,46 @@
-# rate limiter scoped per client ip and per limiter instance 
+# rate limiter scoped per client ip and per limiter instance
 import logging
+from collections.abc import Callable
+
+from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
-from fastapi import HTTPException, Request, status
+
+from app.core.config import Settings, get_settings
 
 logger = logging.getLogger("secretshare.rate_limit")
 
 
 class RateLimiter:
+    """
+    Fixed-window counter in Redis. The limit is read from Settings on every
+    request (via `limit_of`), so it is configurable per environment and can be
+    overridden in tests through the get_settings dependency.
+    """
 
-    def __init__(self, *, limit: int, window_seconds: int, scope: str):
-        self._limit = limit
-        self._window = window_seconds
+    def __init__(self, *, scope: str, limit_of: Callable[[Settings], int]):
         self._scope = scope
+        self._limit_of = limit_of
 
-    async def __call__(self, request: Request) -> None:
+    async def __call__(
+        self,
+        request: Request,
+        settings: Settings = Depends(get_settings),
+    ) -> None:
         redis: Redis | None = getattr(request.app.state, "redis", None)
         if redis is None:
             return
 
+        limit = self._limit_of(settings)
+        window = settings.rate_limit_window_seconds
         client_ip = request.client.host if request.client else "unknown"
         key = f"rl:{self._scope}:{client_ip}"
 
         try:
             current = await redis.incr(key)
             if current == 1:
-                await redis.expire(key, self._window)
+                await redis.expire(key, window)
 
-            if current > self._limit:
+            if current > limit:
                 ttl = await redis.ttl(key)
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,

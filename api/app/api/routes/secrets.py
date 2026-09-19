@@ -16,12 +16,19 @@ router = APIRouter(
     tags=["Secrets"],
 )
 
-create_rate_limit = RateLimiter(limit=10, window_seconds=60, scope="secrets:create")
-retrieve_rate_limit = RateLimiter(limit=30, window_seconds=60, scope="secrets:retrieve")
+create_rate_limit = RateLimiter(
+    scope="secrets:create", limit_of=lambda s: s.create_rate_limit
+)
+retrieve_rate_limit = RateLimiter(
+    scope="secrets:retrieve", limit_of=lambda s: s.retrieve_rate_limit
+)
 
 
-def get_secret_service(request: Request) -> SecretService:
-    store = SecretStore(request.app.state.redis)
+def get_secret_service(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+) -> SecretService:
+    store = SecretStore(request.app.state.redis, ttl_seconds=settings.secret_ttl_seconds)
     return SecretService(store)
 
 
