@@ -18,10 +18,10 @@ import pytest
 import pytest_asyncio
 from app.api.routes.secrets import get_secret_service
 from app.core.config import Settings, get_settings
-from app.core.ids import new_payload_id
 from app.db.models import PAYLOAD_ID_PREFIX_LENGTH, AuditEvent
 from app.db.session import create_engine, create_session_factory, dispose_engine
 from app.main import app
+from tests.fakes import make_secret_service
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -32,21 +32,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
-
-
-class FakeSecretService:
-    """Stands in for Redis only. The audit path stays real."""
-
-    def __init__(self) -> None:
-        self.payloads: dict[str, str] = {}
-
-    async def create_secret(self, ciphertext: str) -> str:
-        payload_id = new_payload_id()
-        self.payloads[payload_id] = ciphertext
-        return payload_id
-
-    async def retrieve_secret(self, payload_id: str) -> str | None:
-        return self.payloads.pop(payload_id, None)
 
 
 @pytest_asyncio.fixture
@@ -72,7 +57,7 @@ def _client_with(session_factory, *, audit_enabled: bool = True):
     Builds a client whose app state carries a real session factory, the way
     the lifespan handler does when DATABASE_URL is set.
     """
-    secrets = FakeSecretService()
+    secrets = make_secret_service()
     app.state.db_session_factory = session_factory
     app.dependency_overrides[get_secret_service] = lambda: secrets
     app.dependency_overrides[get_settings] = lambda: Settings(
@@ -144,7 +129,7 @@ class TestAuditEnabledSetting:
 
     async def test_secret_endpoints_still_work_without_a_database(self):
         """Invariant 5: an audit outage must not change what the route returns."""
-        secrets = FakeSecretService()
+        secrets = make_secret_service()
         app.state.db_session_factory = None
         app.dependency_overrides[get_secret_service] = lambda: secrets
         app.dependency_overrides[get_settings] = lambda: Settings(audit_enabled=True)

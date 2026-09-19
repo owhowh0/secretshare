@@ -5,12 +5,21 @@ import { useSession, signIn, signOut } from 'next-auth/react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api'
 
+// Must stay within the API's SECRET_TTL_MIN_SECONDS..SECRET_TTL_MAX_SECONDS.
+const TTL_OPTIONS = [
+  { seconds: 300, label: '5 minutes' },
+  { seconds: 600, label: '10 minutes' },
+  { seconds: 3600, label: '1 hour' },
+  { seconds: 86400, label: '24 hours' },
+]
+
 export default function Page() {
   const { data: session, status } = useSession()
   const username = session?.user?.name ?? null
 
   const [secret, setSecret] = useState('')
-  const [createResult, setCreateResult] = useState<string | null>(null)
+  const [ttlSeconds, setTtlSeconds] = useState(600)
+  const [createResult, setCreateResult] = useState<{ id: string; expiresAt: string } | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createLoading, setCreateLoading] = useState(false)
 
@@ -45,11 +54,11 @@ export default function Page() {
       const res = await fetch(`${API_BASE}/secrets`, {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify({ ciphertext: secret }),
+        body: JSON.stringify({ ciphertext: secret, ttl_seconds: ttlSeconds }),
       })
       if (!res.ok) throw new Error(`API returned ${res.status}`)
-      const { payload_id } = await res.json()
-      setCreateResult(payload_id)
+      const { payload_id, expires_at } = await res.json()
+      setCreateResult({ id: payload_id, expiresAt: new Date(expires_at).toLocaleString() })
       setSecret('')
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Unknown error')
@@ -111,10 +120,23 @@ export default function Page() {
           rows={5}
           placeholder="Type your secret here…"
         />
+        <select id="ttl-select" value={ttlSeconds} onChange={e => setTtlSeconds(Number(e.target.value))}>
+          {TTL_OPTIONS.map(o => (
+            <option key={o.seconds} value={o.seconds}>
+              Expires in {o.label}
+            </option>
+          ))}
+        </select>
         <button id="create-btn" onClick={handleCreate} disabled={createLoading}>
           {createLoading ? 'Creating…' : 'Create'}
         </button>
-        {createResult && <p className="muted">{createResult}</p>}
+        {createResult && (
+          <p className="muted">
+            {createResult.id}
+            <br />
+            Expires {createResult.expiresAt}
+          </p>
+        )}
         {createError && <p className="error">{createError}</p>}
       </section>
 
