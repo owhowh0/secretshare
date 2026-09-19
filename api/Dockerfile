@@ -50,8 +50,10 @@ RUN groupadd --system --gid 10001 appgroup && \
 # Copy virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
 
-# Copy application source code with non-root ownership
+# Copy application source code with non-root ownership. alembic.ini comes too:
+# migrations run on every container start (see CMD).
 COPY --chown=appuser:appgroup ./app /app/app
+COPY --chown=appuser:appgroup ./alembic.ini /app/alembic.ini
 
 # Drop root privileges
 USER appuser
@@ -63,5 +65,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Launch FastAPI via uvicorn with proxy headers enabled (for reverse proxies like Traefik/Caddy)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Apply pending migrations, then launch FastAPI via uvicorn with proxy headers
+# enabled (for reverse proxies like Traefik/Caddy). A failed migration stops the
+# container instead of serving with a missing schema. exec makes uvicorn PID 1
+# so it receives SIGTERM directly.
+CMD ["sh", "-c", "python -m app.db.migrate && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
