@@ -1,5 +1,4 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from app.api.routes.secrets import router as secrets_router
@@ -19,8 +18,7 @@ logger = logging.getLogger("secretshare.api")
 # Installed at import time so no request can be logged before it is in place.
 install_secret_path_redaction()
 
-default_root = f"/pr-{os.environ['PR_NUMBER']}/api" if os.getenv("PR_NUMBER") else "/api"
-root_path = os.getenv("API_ROOT_PATH", default_root)
+settings = get_settings()
 
 
 @asynccontextmanager
@@ -31,14 +29,10 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
 
-    redis = Redis.from_url(
-        os.getenv("REDIS_URL", settings.redis_url),
-        decode_responses=True,
-    )
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.redis = redis
 
-    database_url = os.getenv("DATABASE_URL", settings.database_url)
-    engine = create_engine(database_url) if database_url else None
+    engine = create_engine(settings.database_url) if settings.database_url else None
     app.state.db_engine = engine
     app.state.db_session_factory = create_session_factory(engine) if engine else None
 
@@ -59,13 +53,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SecretShare API",
     version="0.1.0",
-    root_path=root_path,
+    root_path=settings.root_path,
     lifespan=lifespan,
 )
 
 # CORS
-settings = get_settings()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

@@ -1,5 +1,4 @@
 import asyncio
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -7,6 +6,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from app.core.config import get_settings
 from app.db.base import Base
 from app.db.models import AuditEvent, DeviceKey, User  # noqa: F401  (register tables)
 
@@ -19,9 +19,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# The URL carries the database password, so it is read from the environment at
-# runtime and never written into alembic.ini.
-_database_url = os.getenv("DATABASE_URL")
+# The URL carries the database password, so it is read from Settings (the
+# environment) at runtime and never written into alembic.ini.
+_database_url = get_settings().database_url
 if _database_url:
     config.set_main_option("sqlalchemy.url", _database_url)
 
