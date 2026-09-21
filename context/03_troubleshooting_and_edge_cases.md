@@ -129,21 +129,19 @@ In [`api/app/api/errors.py`](../api/app/api/errors.py), registered custom except
 
 ---
 
-## 6. Automatic Alembic Database Migrations on Startup
+## 6. Audit Log Silently Empty: Migrations Never Ran (PR #21)
 
 ### Symptom:
-When deploying preview or staging environments with clean databases, the API container crashed with `UndefinedTableError: relation "audit_events" does not exist`.
+Everything looked healthy (smoke tests green), but `audit_events` was empty. API logs showed `relation "audit_events" does not exist` on every create and reveal (24 times in 10 minutes on one preview).
 
 ### Root Cause:
-Alembic migrations were not executed automatically as part of container initialization.
+Nothing ran `alembic upgrade head` in preview or staging, and the API image didn't even contain `alembic.ini`. `AuditService` deliberately swallows write failures (a DB outage must not change secret responses, per invariant 5), so the failure was invisible.
 
 ### Solution:
-Implemented [`api/app/db/migrate.py`](../api/app/db/migrate.py), invoked directly before the API application serves traffic in [`api/Dockerfile`](../api/Dockerfile) and in testing suites:
-```python
-def run_migrations():
-    alembic_cfg = Config("alembic.ini")
-    command.upgrade(alembic_cfg, "head")
-```
+- `api/app/db/migrate.py` (`python -m app.db.migrate`) upgrades to head. It's a no-op when already current and is skipped when `DATABASE_URL` is unset.
+- The container `CMD` runs it before uvicorn (`... && exec uvicorn ...`). A failed migration stops the container.
+- The `Dockerfile` copies `alembic.ini`.
+- Tested in `api/tests/test_migrate.py`, including a real upgrade against `TEST_DATABASE_URL` in a subprocess. Running Alembic in-process would let `env.py`'s `fileConfig` reset pytest's loggers.
 
 ---
 
@@ -167,8 +165,8 @@ Implemented centralized [`api/app/core/config.Settings`](../api/app/core/config.
 - **Solution**: Traefik redirect regex middleware normalizes URLs to include trailing slashes.
 
 ### B. Web Cryptography API Unavailable in Plain HTTP
-- **Symptom**: Calling `window.crypto.subtle.digest('SHA-256')` over plain HTTP threw `Cannot read properties of undefined (reading 'digest')`.
-- **Solution**: Ephemeral previews now run exclusively over trusted Tailscale HTTPS (Secure Context). A synchronous JS SHA-256 fallback remains in place for legacy offline environments.
+- **Symptom**: `window.crypto.subtle` is `undefined` over plain HTTP, so PKCE and (now) all E2E encryption in `web/lib/crypto.ts` fail.
+- **Solution**: Previews run only over trusted Tailscale HTTPS (a secure context), and PKCE is handled by NextAuth. The old hand-written JS SHA-256 fallback (`web/lib/pkce.ts`) was removed, and a test asserts it stays gone. Local `http://localhost` still counts as a secure context in browsers.
 
 ### C. Traefik Router Dropped When Service is Missing
 - **Symptom**: Multi-router containers dropped secondary routers with `router has no service`.
@@ -181,3 +179,71 @@ Implemented centralized [`api/app/core/config.Settings`](../api/app/core/config.
 ### E. PostgreSQL Volume Initialization on Persistent Staging Volumes
 - **Symptom**: Mounts to `/docker-entrypoint-initdb.d` were ignored if the data directory was already initialized.
 - **Solution**: Dedicated `keycloak-db-init` container runs idempotent `CREATE DATABASE ... WHERE NOT EXISTS` via `psql`.
+
+---
+
+## 9. Preview Deploy Green, but the Smoke Tests Never Ran (fixed in PR #26)
+
+### Symptom:
+`Deploy Ephemeral Preview` passed, yet the log ended right after the Keycloak `psql` step. There was no output from `wait_services_ready.sh` or any E2E script. The smoke scripts were also outdated for the #22 API contract, and nobody noticed.
+
+### Root Cause:
+The remote script is sent as a heredoc on stdin (`tailscale ssh ... "bash -s" << 'EOF'`). `docker compose exec -T db psql ...` inherits that stdin and **reads the rest of the script as its own input**. Bash then hits EOF and exits 0.
+
+### Solution:
+- Every `docker compose ... exec -T` in the heredoc gets `</dev/null`.
+- The SSH output is `tee`d to `deploy.log`, and the step fails unless `all verification tests passed successfully` appears in it.
+- **Rule:** any command inside that heredoc that can read stdin (`exec`, `ssh`, `read`, `psql` without `-c`...) must have `</dev/null`.
+
+---
+
+## 10. Wrong Recipient Burned the Secret (fixed in PR #26)
+
+### Symptom:
+User B opens a secret meant for user A and gets 403 "not the intended recipient" (correct). When A opens it afterwards, A gets 404 "already retrieved".
+
+### Root Cause:
+`retrieve_secret` did `GETDEL` first and compared `recipient_id` afterwards, so the delete had already happened.
+
+### Solution:
+The recipient check and the delete now run together in one Redis Lua script (`SecretStore.burn_for_recipient`). See `06_secret_lifecycle_and_e2e_encryption.md` §3. The regression tests include a race between 10 intruders and 10 recipient calls on real Redis.
+
+---
+
+## 11. API Contract Changed, Tests Left Behind (fixed in PR #26)
+
+### Symptom:
+`main` was red: 21 failing tests, all `KeyError: 'payload_id'`, `422 != 201`, or `403 != 404/500`.
+
+### Root Cause:
+PR #22 made `recipient_id`, `encrypted_keys` and `iv` required and put `/reveal` behind auth, but older suites still posted `{"ciphertext": ...}` with no signed-in user.
+
+### Solution:
+Shared helpers `secret_body()` and `recipient_claims()` in `api/tests/fakes.py`. Every route test now uses them. When a contract changes, update tests, `.github/scripts/*.sh` and `web/` in the same PR.
+
+---
+
+## 12. Stacked PR Closed When Its Base Branch Was Deleted
+
+### Symptom:
+After merging #19 with `--delete-branch`, PR #20 (based on #19's branch) showed as **closed** and couldn't be retargeted ("Cannot change the base branch of a closed pull request").
+
+### Solution:
+Re-push the deleted base branch, reopen the PR, retarget it to `main`, then delete the branch again. Better: retarget child PRs **before** deleting the parent's branch.
+
+---
+
+## 13. Staging Deploy Keeps Failing (open)
+
+As of 2026-09-21, `deploy-staging.yml` (manual `workflow_dispatch`) fails and the staging stack is broken: `staging-db-1` has exited, and `staging-api-1` and `staging-traefik-1` are stuck in `Created`. Known causes:
+1. **No `/opt/secretshare/.env`** on the server, so `POSTGRES_PASSWORD` is empty and Postgres refuses to start. The staging workflow, unlike the preview workflow, doesn't generate secrets.
+2. **Port conflict:** `docker-compose.yml` starts its own Traefik on :80/:8080, but the shared global `traefik` container (used by previews) already holds those ports on the same host.
+3. (Fixed in #24) The server's `main` had a local commit that diverged from origin. The workflow now does `git fetch` + `checkout -B main origin/main` + `reset --hard`.
+
+A likely fix: deploy staging through `docker-compose.preview.yml`-style routing on the shared Traefik (e.g. a `staging` hostname) and generate `.env` once on the server.
+
+---
+
+## 14. Rate Limits Shared by All Users Behind Traefik (open)
+
+uvicorn runs with `--proxy-headers` but no `--forwarded-allow-ips`, so it only trusts `127.0.0.1`. Behind Traefik, `request.client.host` is Traefik's container IP, and `rl:<scope>:<ip>` becomes one bucket for everyone: 10 creates per minute **in total** per stack. The smoke tests can hit 429 if run repeatedly. The fix is to pass `--forwarded-allow-ips` set to the Traefik network (or `*` if the API is only reachable through Traefik).

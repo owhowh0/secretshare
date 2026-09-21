@@ -95,7 +95,19 @@ Located in [`api/app/core/auth.py`](../api/app/core/auth.py):
   3. Audience (`secretshare-api`).
   4. Expiration (`exp`).
   5. Issuer URL (`iss`).
-- **Protected Endpoints**:
-  - `GET /api/me`: Returns decoded claims (`sub`, `preferred_username`, `email`).
-  - `POST /api/secrets` & `POST /api/secrets/reveal`: Accepts optional `Authorization: Bearer <token>` to associate secrets with user IDs.
-  - **AUD-6 Compliance**: Payload IDs are passed exclusively in the JSON request body (`{"payload_id": "..."}`), preventing secret identifiers from leaking into server access logs, reverse-proxy logs, or browser histories.
+- **Failure responses:** every rejected token gets the same `401 "Invalid or expired token"` (the reason is logged server-side only). An unreachable JWKS endpoint gives 503. A missing `Authorization` header gives 403 (FastAPI `HTTPBearer`).
+
+### Where auth is required
+| Endpoint | Auth | Identity used |
+| :--- | :--- | :--- |
+| `GET /api/me` | Bearer | returns the claims |
+| `POST /api/keys/register` | Bearer | device key owner = `preferred_username` (fallback `sub`) |
+| `POST /api/secrets/reveal` | **Bearer (required)** | must equal the envelope's `recipient_id`, otherwise 403 and the secret is kept |
+| `POST /api/secrets`, `POST /api/secrets/exists`, `GET /api/keys/{user_id}` | none | — |
+
+**Identity contract:** the sender addresses a secret to a Keycloak **username** (`recipient_id`). The API compares it with the caller's `preferred_username` (or `sub` when that claim is missing). Renaming a user in Keycloak therefore orphans secrets and device keys addressed to the old name.
+
+**AUD-6:** payload ids travel only in JSON bodies (`/reveal`, `/exists`), never in URLs. See `06_secret_lifecycle_and_e2e_encryption.md`.
+
+### Test user
+Only one user exists in the realm, `testuser` / `testpassword123`. The preview smoke test covers the wrong-recipient case by addressing a secret to a non-existent `someone-else-e2e` and revealing it as `testuser`.
