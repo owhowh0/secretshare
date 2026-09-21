@@ -34,7 +34,7 @@ Runs `python -m pytest tests/test_tls.py`: the `tls_ca_cert` setting, the SSL co
 Runs only for PRs from this repository whose author is `OWNER`, `MEMBER` or `COLLABORATOR`.
 
 ### Deploy steps (remote script over `tailscale ssh root@staging-server`)
-1. Ensure the shared `traefik-net` network and the global `traefik` container (ports :80/:8080) exist.
+1. Ensure the shared `traefik-net` network and the global `traefik` container (ports :80/:8080, `forwardedHeaders.trustedIPs` = private ranges) exist. An older router without that flag is recreated.
 2. Clone `/opt/secretshare` if needed, then sync the worktree `/opt/secretshare/worktrees/pr-<N>` to `pull/<N>/head`.
 3. Write `.env`, reusing existing secrets if a `.env` is already there: `PR_NUMBER`, `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `AUTH_SECRET`, `TS_AUTHKEY`, `PR_HOSTNAME=pr-<N>.<tailnet>.ts.net`.
 4. Patch `tailscale/serve.json` and the realm redirect URIs with the PR hostname.
@@ -67,7 +67,7 @@ All scripts take the base URL and use `curl -k`.
 
 The scripts build envelopes with fixed dummy key material (the server never inspects it). When the create/reveal contract changes, update `envelope()` in `test_secret_lifecycle.sh`.
 
-The shared rate limit (troubleshooting §14) allows 10 creates per minute per stack; the battery uses 5.
+Rate limits are per client IP (10 creates per minute). All smoke requests come from the same runner, and the battery uses 5 creates.
 
 ---
 

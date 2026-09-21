@@ -85,6 +85,10 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
       - API_ROOT_PATH=/api
+      # Traefik (and any proxy in front of it) sits on a private Docker
+      # network; its X-Forwarded-For carries the real client for rate limits
+      # and audit. Only private ranges: a public peer is never believed.
+      - TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     depends_on:
       db:
         condition: service_healthy

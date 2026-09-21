@@ -1,8 +1,11 @@
+import json
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from app.core.proxy import parse_networks
 
 Environment = Literal["development", "testing", "production"]
 
@@ -56,6 +59,12 @@ class Settings(BaseSettings):
     create_rate_limit: int = Field(default=10, gt=0)
     retrieve_rate_limit: int = Field(default=30, gt=0)
 
+    # Reverse proxies whose X-Forwarded-For / X-Forwarded-Proto are believed
+    # (CIDRs or addresses). Behind Traefik the TCP peer is Traefik, so unless
+    # it is listed here every caller looks like one client to the rate limiter
+    # and the audit log. Env accepts "10.0.0.0/8,172.16.0.0/12" or a JSON list.
+    trusted_proxies: Annotated[list[str], NoDecode] = ["127.0.0.1/32", "::1/128"]
+
     # CORS
     allowed_origins: list[str] = [
         "http://localhost:3000",
@@ -69,6 +78,22 @@ class Settings(BaseSettings):
         if self.pr_number is not None:
             return f"/pr-{self.pr_number}/api"
         return "/api"
+
+    @field_validator("trusted_proxies", mode="before")
+    @classmethod
+    def _split_trusted_proxies(cls, value):
+        if isinstance(value, str):
+            text = value.strip()
+            if text.startswith("["):
+                return json.loads(text)
+            return [item for item in (part.strip() for part in text.split(",")) if item]
+        return value
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _check_trusted_proxies(cls, value: list[str]) -> list[str]:
+        parse_networks(value)  # fail at startup on a malformed CIDR
+        return value
 
     @model_validator(mode="after")
     def _check_ttl_bounds(self) -> "Settings":

@@ -147,6 +147,7 @@ The system includes pre-provisioned testing accounts imported automatically on s
 | `SECRET_TTL_MIN_SECONDS` | `300` | FastAPI | Minimum secret TTL (5 minutes) |
 | `SECRET_TTL_MAX_SECONDS` | `86400` | FastAPI | Maximum secret TTL (24 hours) |
 | `MAX_PAYLOAD_BYTES` | `65536` | FastAPI | Maximum ciphertext size (64 KB) |
+| `TRUSTED_PROXIES` | `127.0.0.1/32,::1/128` (compose: private ranges) | FastAPI | Proxies whose `X-Forwarded-For` is trusted to identify the client for rate limits and audit |
 | `TRAEFIK_WEB_PORT` | `80` | Traefik | Host HTTP ingress port |
 | `TRAEFIK_DASHBOARD_PORT`| `8080` | Traefik | Host port for Traefik dashboard |
 
