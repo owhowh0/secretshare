@@ -153,6 +153,21 @@ class TestRedisSSLContext:
         with pytest.raises(ssl.SSLError):
             ssl.create_default_context(cafile=str(bad))
 
+    def test_redis_ssl_connection_kwargs(self, ca_cert_file):
+        from redis.asyncio import Redis
+
+        client = Redis.from_url(
+            "rediss://redis:6379/0",
+            decode_responses=True,
+            ssl_ca_certs=str(ca_cert_file),
+            ssl_cert_reqs="required",
+            ssl_check_hostname=False,
+        )
+        kwargs = client.connection_pool.connection_kwargs
+        assert kwargs["ssl_ca_certs"] == str(ca_cert_file)
+        assert kwargs["ssl_cert_reqs"] == "required"
+        assert kwargs["ssl_check_hostname"] is False
+
 
 # ---------------------------------------------------------------------------
 # 4. tls/generate.sh

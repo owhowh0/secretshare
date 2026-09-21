@@ -33,10 +33,10 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
 
     redis_kwargs: dict = {"decode_responses": True}
-    if settings.tls_ca_cert:
-        ssl_ctx = ssl.create_default_context(cafile=settings.tls_ca_cert)
-        ssl_ctx.check_hostname = False  # internal Docker; CN=redis, not the hostname
-        redis_kwargs["ssl"] = ssl_ctx
+    if settings.tls_ca_cert and settings.redis_url.startswith("rediss://"):
+        redis_kwargs["ssl_ca_certs"] = settings.tls_ca_cert
+        redis_kwargs["ssl_cert_reqs"] = "required"
+        redis_kwargs["ssl_check_hostname"] = False
     redis = Redis.from_url(settings.redis_url, **redis_kwargs)
     app.state.redis = redis
 
