@@ -5,6 +5,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import Settings, get_settings
+from tests.fakes import secret_body
 from app.main import app
 
 pytestmark = pytest.mark.integration
@@ -120,7 +121,8 @@ class TestOAuthLiveIntegration:
         create_resp = await api_client.post(
             "/secrets",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"ciphertext": "authenticated-secret-payload"},
+            # Addressed to the signed-in user, who alone may reveal it.
+            json=secret_body("authenticated-secret-payload", recipient_id=TEST_USERNAME),
         )
         assert create_resp.status_code == 201, f"Create failed: {create_resp.status_code} - {create_resp.text}"
         payload_id = create_resp.json().get("payload_id")

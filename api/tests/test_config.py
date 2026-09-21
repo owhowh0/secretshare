@@ -5,12 +5,17 @@ production fail-fast check, and that the routes actually use the configured
 TTL and rate limits instead of hardcoded values.
 """
 
+import json
+
 import pytest
 from app.api.routes.secrets import get_audit_service
+from app.core.auth import get_current_user
 from app.core.config import Settings, get_settings
 from app.main import app
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+
+from tests.fakes import recipient_claims, secret_body
 
 # Every field Settings reads, so a developer's shell or .env cannot leak into
 # the assertions about defaults.
@@ -201,8 +206,14 @@ class RecordingRedis:
         self.data[key] = value
         self.expiries[key] = ex
 
-    async def getdel(self, key: str) -> str | None:
-        return self.data.pop(key, None)
+    async def eval(self, script: str, numkeys: int, key: str, recipient_id: str):
+        # Stands in for SecretStore's burn-for-recipient script.
+        payload = self.data.get(key)
+        if payload is None:
+            return ["missing"]
+        if json.loads(payload).get("recipient_id") != recipient_id:
+            return ["denied"]
+        return ["burned", self.data.pop(key)]
 
     async def incr(self, key: str) -> int:
         self.counters[key] = self.counters.get(key, 0) + 1
@@ -230,6 +241,7 @@ def make_client():
         app.state.redis = redis
         app.dependency_overrides[get_settings] = lambda: settings
         app.dependency_overrides[get_audit_service] = lambda: NullAuditService()
+        app.dependency_overrides[get_current_user] = recipient_claims
         return TestClient(app), redis
 
     yield _make
@@ -245,7 +257,7 @@ class TestRoutesUseSettings:
     def test_secret_ttl_comes_from_settings(self, make_client):
         client, redis = make_client(_settings(secret_ttl_seconds=450))
 
-        payload_id = client.post("/secrets", json={"ciphertext": "abc"}).json()["payload_id"]
+        payload_id = client.post("/secrets", json=secret_body("abc")).json()["payload_id"]
 
         assert redis.expiries[f"s:{payload_id}"] == 450
 
@@ -255,12 +267,12 @@ class TestRoutesUseSettings:
         )
 
         codes = [
-            client.post("/secrets", json={"ciphertext": "abc"}).status_code
+            client.post("/secrets", json=secret_body("abc")).status_code
             for _ in range(3)
         ]
 
         assert codes == [201, 201, 429]
-        limited = client.post("/secrets", json={"ciphertext": "abc"})
+        limited = client.post("/secrets", json=secret_body("abc"))
         assert limited.headers["retry-after"] == "17"
 
     def test_retrieve_rate_limit_comes_from_settings(self, make_client):

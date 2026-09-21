@@ -47,7 +47,12 @@ jobs:
           echo "preview_url=${PREVIEW_URL}" >> "$GITHUB_OUTPUT"
           echo "pr_hostname=${PR_HOSTNAME}" >> "$GITHUB_OUTPUT"
 
-          tailscale ssh root@staging-server "PR_HOSTNAME='${PR_HOSTNAME}' TS_AUTHKEY='${TS_AUTHKEY}' bash -s" << 'EOF'
+          # The remote script arrives on stdin. Anything in it that reads stdin
+          # (e.g. docker compose exec) swallows the rest of the script, and the
+          # step used to end green without ever running the smoke tests. Fail
+          # unless the script's final line was actually printed.
+          set -o pipefail
+          tailscale ssh root@staging-server "PR_HOSTNAME='${PR_HOSTNAME}' TS_AUTHKEY='${TS_AUTHKEY}' bash -s" << 'EOF' | tee deploy.log
             set -euxo pipefail
             trap 'echo "!!! DEPLOYMENT FAILED AT LINE ${LINENO} (exit code: $?) !!!"' ERR
             PR_NUM="${{ github.event.number }}"
@@ -143,17 +148,17 @@ jobs:
             fi
 
             # Ensure client redirect URIs are active even if realm import was skipped due to existing DB
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db psql -U secretshare -d "keycloak_pr_${PR_NUM}" -c \
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null db psql -U secretshare -d "keycloak_pr_${PR_NUM}" -c \
               "INSERT INTO redirect_uris (client_id, value) SELECT id, 'https://${PR_HOSTNAME}/*' FROM client WHERE client_id='secretshare-api' AND NOT EXISTS (SELECT 1 FROM redirect_uris WHERE client_id=client.id AND value='https://${PR_HOSTNAME}/*');" 2>/dev/null || true
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T db psql -U secretshare -d "keycloak_pr_${PR_NUM}" -c \
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null db psql -U secretshare -d "keycloak_pr_${PR_NUM}" -c \
               "INSERT INTO redirect_uris (client_id, value) SELECT id, '*' FROM client WHERE client_id='secretshare-api' AND NOT EXISTS (SELECT 1 FROM redirect_uris WHERE client_id=client.id AND value='*');" 2>/dev/null || true
 
             echo "=== Waiting for Tailscale container to authenticate ==="
             PR_IP=""
             for i in $(seq 1 20); do
-              STATUS=$(docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale status --json 2>/dev/null | jq -r '.BackendState // empty' 2>/dev/null || true)
+              STATUS=$(docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null tailscale tailscale status --json 2>/dev/null | jq -r '.BackendState // empty' 2>/dev/null || true)
               if [ "$STATUS" = "Running" ]; then
-                PR_IP=$(docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale ip -4 2>/dev/null | head -n1 | tr -d '\r\n' || true)
+                PR_IP=$(docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null tailscale tailscale ip -4 2>/dev/null | head -n1 | tr -d '\r\n' || true)
                 echo "-> Tailscale node is Running with IP: ${PR_IP}"
                 break
               fi
@@ -162,9 +167,9 @@ jobs:
             done
 
             echo "=== Activating Tailscale Serve on port 443 (HTTPS) & 80 (HTTP) ==="
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale serve --bg --https=443 / http://traefik:80 || true
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale serve --bg --http=80 http://traefik:80 || true
-            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T tailscale tailscale serve status || true
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null tailscale tailscale serve --bg --https=443 / http://traefik:80 || true
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null tailscale tailscale serve --bg --http=80 http://traefik:80 || true
+            docker compose -p "pr-${PR_NUM}" -f docker-compose.preview.yml exec -T </dev/null tailscale tailscale serve status || true
 
             if [ -n "${PR_IP}" ]; then
               sed -i "/ ${PR_HOSTNAME}$/d" /etc/hosts || true
@@ -184,6 +189,10 @@ jobs:
 
             echo "=== Preview deployment and all verification tests passed successfully! ==="
           EOF
+          grep -q "all verification tests passed successfully" deploy.log || {
+            echo "::error::Preview script ended before the smoke tests completed"
+            exit 1
+          }
 
       - name: Publish Preview Summary to Pipeline
         if: success()

@@ -16,12 +16,13 @@ import os
 
 import pytest
 import pytest_asyncio
+from app.core.auth import get_current_user
 from app.api.routes.secrets import get_secret_service
 from app.core.config import Settings, get_settings
 from app.db.models import PAYLOAD_ID_PREFIX_LENGTH, AuditEvent
 from app.db.session import create_engine, create_session_factory, dispose_engine
 from app.main import app
-from tests.fakes import make_secret_service
+from tests.fakes import make_secret_service, recipient_claims, secret_body
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -60,6 +61,7 @@ def _client_with(session_factory, *, audit_enabled: bool = True):
     secrets = make_secret_service()
     app.state.db_session_factory = session_factory
     app.dependency_overrides[get_secret_service] = lambda: secrets
+    app.dependency_overrides[get_current_user] = recipient_claims
     app.dependency_overrides[get_settings] = lambda: Settings(
         audit_enabled=audit_enabled
     )
@@ -78,7 +80,7 @@ class TestAuditReachesTheDatabase:
     async def test_create_writes_a_created_row(self, client, session_factory):
         response = await client.post(
             "/secrets",
-            json={"ciphertext": CIPHERTEXT},
+            json=secret_body(CIPHERTEXT),
             headers={"user-agent": "route-probe/1.0"},
         )
         assert response.status_code == 201
@@ -93,7 +95,7 @@ class TestAuditReachesTheDatabase:
     async def test_reveal_then_burn_writes_revealed_then_denied(
         self, client, session_factory
     ):
-        created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        created = await client.post("/secrets", json=secret_body(CIPHERTEXT))
         payload_id = created.json()["payload_id"]
         prefix = payload_id[:PAYLOAD_ID_PREFIX_LENGTH]
 
@@ -106,7 +108,7 @@ class TestAuditReachesTheDatabase:
     async def test_full_payload_id_never_reaches_the_table(
         self, client, session_factory
     ):
-        created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        created = await client.post("/secrets", json=secret_body(CIPHERTEXT))
         payload_id = created.json()["payload_id"]
 
         rows = await _fetch(session_factory, payload_id[:PAYLOAD_ID_PREFIX_LENGTH])
@@ -117,7 +119,7 @@ class TestAuditReachesTheDatabase:
 class TestAuditEnabledSetting:
     async def test_disabled_setting_writes_nothing(self, session_factory):
         async with _client_with(session_factory, audit_enabled=False) as ac:
-            created = await ac.post("/secrets", json={"ciphertext": CIPHERTEXT})
+            created = await ac.post("/secrets", json=secret_body(CIPHERTEXT))
             payload_id = created.json()["payload_id"]
             assert (await ac.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 200
 
@@ -132,12 +134,13 @@ class TestAuditEnabledSetting:
         secrets = make_secret_service()
         app.state.db_session_factory = None
         app.dependency_overrides[get_secret_service] = lambda: secrets
+        app.dependency_overrides[get_current_user] = recipient_claims
         app.dependency_overrides[get_settings] = lambda: Settings(audit_enabled=True)
 
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as ac:
-            created = await ac.post("/secrets", json={"ciphertext": CIPHERTEXT})
+            created = await ac.post("/secrets", json=secret_body(CIPHERTEXT))
             assert created.status_code == 201
             payload_id = created.json()["payload_id"]
 
