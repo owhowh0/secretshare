@@ -140,12 +140,9 @@ class TestCreateEngineSSL:
 
 
 class TestRedisSSLContext:
-    def test_context_does_not_check_hostname(self, ca_cert_file):
-        ctx = ssl.create_default_context(cafile=str(ca_cert_file))
-        ctx.check_hostname = False
-        assert ctx.check_hostname is False
-
     def test_context_requires_cert_verification(self, ca_cert_file):
+        # check_hostname is disabled because the app connects to the service name
+        # ("redis"), not a FQDN; cert verification itself is still enforced.
         ctx = ssl.create_default_context(cafile=str(ca_cert_file))
         ctx.check_hostname = False
         assert ctx.verify_mode == ssl.CERT_REQUIRED
@@ -184,8 +181,9 @@ class TestGenerateScript:
 
     def test_expected_files_are_created(self, cert_dir):
         self._run(cert_dir)
+        # ca.srl is OpenSSL's serial number tracking file produced by -CAcreateserial.
         assert {f.name for f in cert_dir.iterdir()} == {
-            "ca.key", "ca.crt",
+            "ca.key", "ca.crt", "ca.srl",
             "postgres.key", "postgres.crt",
             "redis.key", "redis.crt",
         }
