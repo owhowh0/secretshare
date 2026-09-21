@@ -178,8 +178,11 @@ export default function Page() {
     setRetrieveResult(null)
 
     try {
-      const res = await fetch(`${API_BASE}/secrets/${encodeURIComponent(payloadId.trim())}/exists`, {
+      // Id in the body, not the URL, so it stays out of access logs (AUD-6).
+      const res = await fetch(`${API_BASE}/secrets/exists`, {
+        method: 'POST',
         headers: getHeaders(),
+        body: JSON.stringify({ payload_id: payloadId.trim() }),
       })
       if (!res.ok) throw new Error(`Failed to check secret existence (${res.status})`)
       const { exists } = await res.json()

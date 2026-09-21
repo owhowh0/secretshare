@@ -59,7 +59,7 @@ reveal_code() {  # $1 payload id, $2 optional auth header ("" for none)
 }
 
 still_exists() {
-  curl -s -k -f -m 10 "${BASE_URL}/api/secrets/$1/exists" | grep -q '"exists":true'
+  curl -s -k -f -m 10 -X POST "${BASE_URL}/api/secrets/exists"     -H "Content-Type: application/json"     -d "{\"payload_id\": \"$1\"}" | grep -q '"exists":true'
 }
 
 echo "--- 1. Testing Recipient Secret Lifecycle ---"

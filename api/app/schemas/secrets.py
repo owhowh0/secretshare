@@ -72,6 +72,11 @@ class SecretRevealRequest(BaseModel):
     payload_id: str = Field(min_length=1, max_length=128)
 
 
+class SecretExistsRequest(BaseModel):
+    # In the body for the same reason as SecretRevealRequest (AUD-6).
+    payload_id: str = Field(min_length=1, max_length=128)
+
+
 class SecretExistsResponse(BaseModel):
     exists: bool
 
