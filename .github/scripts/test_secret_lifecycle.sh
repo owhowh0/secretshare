@@ -97,4 +97,25 @@ BURN_CODE=$(curl -s -k -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/s
 }
 echo "-> Anonymous secret burned successfully (404 on second reveal)"
 
+echo "--- 3. Testing Custom TTL & Validation ---"
+TTL_RESPONSE=$(curl -s -f -m 10 -X POST "${BASE_URL}/api/secrets"   -H "Content-Type: application/json"   -d '{"ciphertext": "ttl-e2e-smoke-test", "ttl_seconds": 3600}')
+echo "${TTL_RESPONSE}" | grep -q '"ttl_seconds":3600' || {
+  echo "Error: custom ttl_seconds not honored: ${TTL_RESPONSE}"
+  exit 1
+}
+echo "${TTL_RESPONSE}" | grep -q '"expires_at":' || {
+  echo "Error: expires_at missing from create response: ${TTL_RESPONSE}"
+  exit 1
+}
+echo "-> Custom TTL accepted (3600s) with expires_at"
+
+for BAD_TTL in 10 86401; do
+  BAD_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/secrets"     -H "Content-Type: application/json"     -d "{\"ciphertext\": \"ttl-e2e-smoke-test\", \"ttl_seconds\": ${BAD_TTL}}")
+  [ "${BAD_CODE}" = "422" ] || {
+    echo "Error: Expected 422 for ttl_seconds=${BAD_TTL}, got ${BAD_CODE}"
+    exit 1
+  }
+done
+echo "-> Out-of-bounds TTL rejected with 422"
+
 echo "=== All Secret Lifecycle tests passed! ==="

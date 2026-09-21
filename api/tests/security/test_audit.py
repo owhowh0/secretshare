@@ -14,6 +14,7 @@ from app.core.audit import AuditService, payload_id_prefix
 from app.core.ids import new_payload_id
 from app.db.models import PAYLOAD_ID_PREFIX_LENGTH
 from app.main import app
+from tests.fakes import make_secret_service
 from fastapi.testclient import TestClient
 
 CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
@@ -45,19 +46,6 @@ class RecordingAuditService:
         )
 
 
-class FakeSecretService:
-    def __init__(self) -> None:
-        self.payloads: dict[str, str] = {}
-
-    async def create_secret(self, ciphertext: str) -> str:
-        payload_id = new_payload_id()
-        self.payloads[payload_id] = ciphertext
-        return payload_id
-
-    async def retrieve_secret(self, payload_id: str) -> str | None:
-        return self.payloads.pop(payload_id, None)
-
-
 @pytest.fixture
 def audit() -> RecordingAuditService:
     return RecordingAuditService()
@@ -65,7 +53,7 @@ def audit() -> RecordingAuditService:
 
 @pytest.fixture
 def client(audit: RecordingAuditService):
-    secrets = FakeSecretService()
+    secrets = make_secret_service()
     app.dependency_overrides[get_secret_service] = lambda: secrets
     app.dependency_overrides[get_audit_service] = lambda: audit
 
@@ -183,7 +171,7 @@ class TestAuditDoesNotWeakenResponses:
                 raise RuntimeError("postgres is down")
 
         broken_audit = AuditService(BrokenSessionFactory())
-        secrets = FakeSecretService()
+        secrets = make_secret_service()
 
         app.dependency_overrides[get_secret_service] = lambda: secrets
         app.dependency_overrides[get_audit_service] = lambda: broken_audit

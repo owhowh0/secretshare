@@ -1,7 +1,7 @@
 import logging
-import os
 from contextlib import asynccontextmanager
 
+from app.api.errors import register_exception_handlers
 from app.api.routes.secrets import router as secrets_router
 from app.core.auth import get_current_user
 from app.core.config import get_settings
@@ -19,7 +19,7 @@ logger = logging.getLogger("secretshare.api")
 # Installed at import time so no request can be logged before it is in place.
 install_secret_path_redaction()
 
-root_path = os.getenv("API_ROOT_PATH", "/api")
+settings = get_settings()
 
 
 @asynccontextmanager
@@ -30,14 +30,10 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
 
-    redis = Redis.from_url(
-        os.getenv("REDIS_URL", settings.redis_url),
-        decode_responses=True,
-    )
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.redis = redis
 
-    database_url = os.getenv("DATABASE_URL", settings.database_url)
-    engine = create_engine(database_url) if database_url else None
+    engine = create_engine(settings.database_url) if settings.database_url else None
     app.state.db_engine = engine
     app.state.db_session_factory = create_session_factory(engine) if engine else None
 
@@ -58,13 +54,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SecretShare API",
     version="0.1.0",
-    root_path=root_path,
+    root_path=settings.root_path,
     lifespan=lifespan,
 )
 
 # CORS
-settings = get_settings()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -84,6 +78,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(secrets_router)
+register_exception_handlers(app)
 
 
 @app.get("/health", tags=["Health"])

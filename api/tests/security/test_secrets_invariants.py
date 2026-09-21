@@ -25,6 +25,7 @@ from app.api.routes.secrets import (
 from app.core.config import Settings, get_settings
 from app.core.ids import new_payload_id
 from app.main import app
+from app.services.exceptions import SecretNotFoundError
 from app.services.secrets import SecretService
 from app.storage.redis_store import SecretStore
 from httpx import ASGITransport, AsyncClient
@@ -58,7 +59,12 @@ async def redis():
 
 @pytest_asyncio.fixture
 async def service(redis):
-    return SecretService(SecretStore(redis, ttl_seconds=TTL_SECONDS))
+    return SecretService(
+        SecretStore(redis),
+        default_ttl_seconds=TTL_SECONDS,
+        min_ttl_seconds=300,
+        max_ttl_seconds=86400,
+    )
 
 
 @pytest_asyncio.fixture
@@ -85,23 +91,26 @@ class TestAtomicBurn:
     @requires_redis
     async def test_burn_is_single_delivery(self, service):
         for _ in range(5):
-            payload_id = await service.create_secret(CIPHERTEXT)
+            payload_id = (await service.create_secret(CIPHERTEXT)).payload_id
 
             results = await asyncio.gather(
-                *[service.retrieve_secret(payload_id) for _ in range(20)]
+                *[service.retrieve_secret(payload_id) for _ in range(20)],
+                return_exceptions=True,
             )
 
-            winners = [r for r in results if r is not None]
+            winners = [r for r in results if isinstance(r, str)]
+            misses = [r for r in results if isinstance(r, SecretNotFoundError)]
             assert len(winners) == 1, f"{len(winners)} readers received the secret"
             assert winners[0] == CIPHERTEXT
-            assert results.count(None) == 19
+            assert len(misses) == 19
 
     @requires_redis
     async def test_second_read_is_a_miss(self, service):
-        payload_id = await service.create_secret(CIPHERTEXT)
+        payload_id = (await service.create_secret(CIPHERTEXT)).payload_id
 
         assert await service.retrieve_secret(payload_id) == CIPHERTEXT
-        assert await service.retrieve_secret(payload_id) is None
+        with pytest.raises(SecretNotFoundError):
+            await service.retrieve_secret(payload_id)
 
 
 class TestNoEnumerationOracle:
@@ -177,6 +186,29 @@ class TestTtl:
 
         assert 0 < ttl <= TTL_SECONDS
         assert ttl > TTL_SECONDS - 60, "TTL is far below the configured window"
+
+    @requires_redis
+    async def test_requested_ttl_reaches_redis(self, client, redis):
+        created = await client.post(
+            "/secrets", json={"ciphertext": CIPHERTEXT, "ttl_seconds": 3600}
+        )
+        assert created.status_code == 201
+        payload_id = created.json()["payload_id"]
+
+        ttl = await redis.ttl(f"s:{payload_id}")
+
+        assert 3600 - 60 < ttl <= 3600
+
+    @requires_redis
+    async def test_ttl_above_maximum_never_reaches_redis(self, client, redis):
+        before = len(await redis.keys("s:*"))
+        response = await client.post(
+            "/secrets", json={"ciphertext": CIPHERTEXT, "ttl_seconds": 86400 + 1}
+        )
+        after = len(await redis.keys("s:*"))
+
+        assert response.status_code == 422
+        assert after == before
 
 
 class TestSecurityHeaders:

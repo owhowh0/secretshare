@@ -79,6 +79,14 @@ All configuration is managed through environment variables. Copy `.env.example` 
 | `KEYCLOAK_URL` | No | `http://keycloak:8080/keycloak` | App / Web | Base URL for Keycloak OIDC issuer & JWKS |
 | `KEYCLOAK_PATH` | No | `/keycloak` | Traefik | Path prefix where Keycloak is served |
 | `API_ROOT_PATH` | No | `/api` | FastAPI | OpenAPI and Swagger path prefix (handles subpath routing) |
+| `ENVIRONMENT` | No | `development` | FastAPI | `development` / `testing` / `production`; production fails fast if `DATABASE_URL` or `KEYCLOAK_*` are missing |
+| `SECRET_TTL_SECONDS` | No | `600` | FastAPI | Default lifetime of an unread secret when the client sends no `ttl_seconds` |
+| `SECRET_TTL_MIN_SECONDS` | No | `300` | FastAPI | Smallest `ttl_seconds` a client may request |
+| `SECRET_TTL_MAX_SECONDS` | No | `86400` | FastAPI | Largest `ttl_seconds` a client may request |
+| `MAX_PAYLOAD_BYTES` | No | `65536` | FastAPI | Max ciphertext size accepted by `POST /secrets` |
+| `RATE_LIMIT_WINDOW_SECONDS` | No | `60` | FastAPI | Rate-limit window length |
+| `CREATE_RATE_LIMIT` | No | `10` | FastAPI | `POST /secrets` requests per IP per window |
+| `RETRIEVE_RATE_LIMIT` | No | `30` | FastAPI | `POST /secrets/reveal` requests per IP per window |
 | `PR_NUMBER` | Conditional | — | Preview | Injected in preview environments for isolation (`/pr-<N>`) |
 | `TEST_USER_USERNAME` | No | `testuser` | Tests | Pre-configured test username for integration tests |
 | `TEST_USER_PASSWORD` | No | `testpassword123` | Tests | Pre-configured test password for integration tests |

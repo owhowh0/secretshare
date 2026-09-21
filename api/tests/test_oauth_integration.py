@@ -48,21 +48,9 @@ async def api_client():
             yield client
     else:
         from app.api.routes.secrets import get_secret_service
+        from tests.fakes import make_secret_service
 
-        class _InMemorySecretService:
-            def __init__(self) -> None:
-                self.payloads = {}
-
-            async def create_secret(self, ciphertext: str) -> str:
-                import uuid
-                pid = str(uuid.uuid4())
-                self.payloads[pid] = ciphertext
-                return pid
-
-            async def retrieve_secret(self, payload_id: str) -> str | None:
-                return self.payloads.pop(payload_id, None)
-
-        fake_service = _InMemorySecretService()
+        fake_service = make_secret_service()
 
         def _live_settings():
             return Settings(

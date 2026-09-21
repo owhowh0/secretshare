@@ -47,6 +47,7 @@ section {
 }
 
 textarea,
+select,
 input[type='text'] {
   width: 100%;
   padding: 0.75rem;
@@ -60,6 +61,7 @@ input[type='text'] {
 }
 
 textarea:focus,
+select:focus,
 input:focus {
   outline: 2px solid #4f8ef7;
   border-color: transparent;
