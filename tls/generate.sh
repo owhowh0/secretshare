@@ -3,7 +3,7 @@
 # Redis. Idempotent: skips generation if the CA certificate already exists.
 set -e
 
-CERTS=/certs
+CERTS="${CERTS:-/certs}"
 
 if [ -f "$CERTS/ca.crt" ]; then
     echo "tls: certificates already present, skipping generation."
