@@ -1,10 +1,12 @@
 name: Deploy Staging
 
 on:
-  push:
-    branches:
-      - main
-      - develop
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: false
+        default: "main"
 
 concurrency:
   group: deploy-staging
@@ -39,8 +41,8 @@ jobs:
             cd "${REPO_DIR}"
             git remote set-url origin "https://github.com/${{ github.repository }}.git"
             git fetch origin
-            git checkout main || git checkout develop
-            git pull origin $(git rev-parse --abbrev-ref HEAD)
+            git checkout "${{ inputs.branch || 'main' }}"
+            git pull origin "${{ inputs.branch || 'main' }}"
 
             echo "=== Ensuring shared traefik network ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
