@@ -9,13 +9,18 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binary = atob(base64)
+  let normalized = base64.replace(/-/g, '+').replace(/_/g, '/')
+  while (normalized.length % 4 !== 0) {
+    normalized += '='
+  }
+  const binary = atob(normalized)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i)
   }
   return bytes.buffer
 }
+
 
 /**
  * Generate an RSA-OAEP 2048-bit key pair using SHA-256

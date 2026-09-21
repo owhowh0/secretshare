@@ -63,13 +63,13 @@ export default function Page() {
     return headers
   }, [session])
 
-  // Auto-onboard device on login
+  // Auto-onboard device on login, scoped by username
   useEffect(() => {
-    if (status !== 'authenticated' || !session) return
+    if (status !== 'authenticated' || !session || !username) return
 
     async function onboardDevice() {
       try {
-        const localKey = await getOrGenerateDeviceKey('Web Browser')
+        const localKey = await getOrGenerateDeviceKey(username!, 'Web Browser')
         if (localKey.deviceId) {
           setDeviceRegistered(true)
           return
@@ -90,7 +90,7 @@ export default function Page() {
         }
 
         const data: DeviceKeyItem = await res.json()
-        await updateStoredDeviceId(data.device_id)
+        await updateStoredDeviceId(username!, data.device_id)
         setDeviceRegistered(true)
       } catch (err) {
         setOnboardingError(err instanceof Error ? err.message : 'Key registration failed')
@@ -98,7 +98,7 @@ export default function Page() {
     }
 
     onboardDevice()
-  }, [status, session, getHeaders])
+  }, [status, session, username, getHeaders])
 
   async function handleLogin() {
     await signIn('keycloak')
@@ -201,9 +201,13 @@ export default function Page() {
     setRetrieveError(null)
 
     try {
-      const localKey = await getStoredDeviceKey()
+      if (!username) {
+        throw new Error('You must be logged in to reveal secrets.')
+      }
+
+      const localKey = await getStoredDeviceKey(username)
       if (!localKey) {
-        throw new Error('No local device key found. Cannot decrypt secret.')
+        throw new Error(`No local device key found for ${username}. Cannot decrypt secret.`)
       }
 
       // Atomically burn from server
@@ -219,23 +223,25 @@ export default function Page() {
 
       const envelope = await res.json()
 
-      // Find key matching current device, or attempt unwrap across available keys
-      let matchingEncryptedKey = envelope.encrypted_keys.find(
-        (k: any) => k.device_id === localKey.deviceId
-      )
-      if (!matchingEncryptedKey && envelope.encrypted_keys.length > 0) {
-        matchingEncryptedKey = envelope.encrypted_keys[0]
+      // Attempt to unwrap AES key across available recipient keys
+      let rawAesKey: ArrayBuffer | null = null
+      for (const encKey of envelope.encrypted_keys) {
+        try {
+          rawAesKey = await decryptAesKeyWithRsa(
+            encKey.encrypted_aes_key,
+            localKey.privateKey
+          )
+          if (rawAesKey) break
+        } catch {
+          // Continue trying other candidate keys
+        }
       }
 
-      if (!matchingEncryptedKey) {
-        throw new Error('No encrypted key available for this device.')
+      if (!rawAesKey) {
+        throw new Error('Could not decrypt secret: private key mismatch for this device.')
       }
 
-      // Local RSA decapsulation + AES decryption
-      const rawAesKey = await decryptAesKeyWithRsa(
-        matchingEncryptedKey.encrypted_aes_key,
-        localKey.privateKey
-      )
+      // Local AES-256-GCM decrypt in RAM
       const plaintext = await decryptAesGcm(envelope.ciphertext, envelope.iv, rawAesKey)
 
       setRetrieveResult(plaintext)

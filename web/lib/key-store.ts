@@ -6,10 +6,9 @@ import {
 const DB_NAME = 'secretshare_keystore'
 const DB_VERSION = 1
 const STORE_NAME = 'device_keys'
-const KEY_RECORD_ID = 'local_device_key'
 
 export interface StoredDeviceKeyRecord {
-  id: string
+  id: string // username: e.g. "calin", "ilie"
   deviceId?: string
   publicKey: CryptoKey
   privateKey: CryptoKey
@@ -34,24 +33,18 @@ function openDatabase(): Promise<IDBDatabase> {
   })
 }
 
-/**
- * Retrieve local device key record from IndexedDB if present
- */
-export async function getStoredDeviceKey(): Promise<StoredDeviceKeyRecord | null> {
+export async function getStoredDeviceKey(username: string): Promise<StoredDeviceKeyRecord | null> {
   const db = await openDatabase()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
     const store = tx.objectStore(STORE_NAME)
-    const request = store.get(KEY_RECORD_ID)
+    const request = store.get(username)
 
     request.onsuccess = () => resolve(request.result || null)
     request.onerror = () => reject(request.error)
   })
 }
 
-/**
- * Save device key record to IndexedDB
- */
 export async function saveDeviceKey(record: StoredDeviceKeyRecord): Promise<void> {
   const db = await openDatabase()
   return new Promise((resolve, reject) => {
@@ -64,13 +57,11 @@ export async function saveDeviceKey(record: StoredDeviceKeyRecord): Promise<void
   })
 }
 
-/**
- * Get or generate local RSA-OAEP device key pair
- */
 export async function getOrGenerateDeviceKey(
+  username: string,
   label: string = 'Web Browser'
 ): Promise<StoredDeviceKeyRecord> {
-  const existing = await getStoredDeviceKey()
+  const existing = await getStoredDeviceKey(username)
   if (existing) {
     return existing
   }
@@ -79,7 +70,7 @@ export async function getOrGenerateDeviceKey(
   const spkiPem = await exportPublicKeyToSpkiPem(keyPair.publicKey)
 
   const record: StoredDeviceKeyRecord = {
-    id: KEY_RECORD_ID,
+    id: username,
     publicKey: keyPair.publicKey,
     privateKey: keyPair.privateKey,
     spkiPem,
@@ -91,11 +82,8 @@ export async function getOrGenerateDeviceKey(
   return record
 }
 
-/**
- * Link registered backend deviceId to local store
- */
-export async function updateStoredDeviceId(deviceId: string): Promise<void> {
-  const existing = await getStoredDeviceKey()
+export async function updateStoredDeviceId(username: string, deviceId: string): Promise<void> {
+  const existing = await getStoredDeviceKey(username)
   if (existing) {
     existing.deviceId = deviceId
     await saveDeviceKey(existing)
