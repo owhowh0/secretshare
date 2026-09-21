@@ -64,29 +64,32 @@ All incoming traffic enters via **Traefik**, which routes requests cleanly by pa
 
 ## Quick Start (One-Command Deployment)
 
-The default `docker-compose.yml` is configured as a turnkey, self-contained example stack. Anyone can clone the repository and launch the full application immediately without manual setup:
+The `docker-compose.preview.yml` compose file is configured as a turnkey, self-contained example stack with out-of-the-box defaults. Anyone can clone the repository and launch an isolated example stack immediately without manual `.env` setup:
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/owhowh0/secretshare.git
 cd secretshare
 
-# 2. Deploy the full stack
-docker compose up -d --build
+# 2. Ensure shared network exists
+docker network create traefik-net 2>/dev/null || true
+
+# 3. Deploy the example preview stack
+docker compose -f docker-compose.preview.yml up -d --build
 ```
 
-That's it! Docker Compose will automatically:
+Compose will automatically:
 - Create required networks and volumes.
 - Generate local TLS certificates for datastores via `tls-init`.
 - Bootstrap the PostgreSQL database and Keycloak schema.
 - Import the Keycloak realm and test accounts.
 - Build and start the Next.js frontend and FastAPI backend.
 
-### Optional Customization
-To customize passwords, ports, or secrets, copy `.env.example` to `.env` before running Compose:
+### Production / Staging Deployment
+For staging and standard deployments using `docker-compose.yml`, configure your environment via `.env`:
 ```bash
 cp .env.example .env
-# Edit .env with your desired settings
+# Customize passwords and secret keys in .env
 docker compose up -d --build
 ```
 
