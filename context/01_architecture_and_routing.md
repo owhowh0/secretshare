@@ -1,80 +1,76 @@
 # Architecture & Routing
 
-## 1. Routing Model: Local Dev & Ephemeral PR Subdomains
+## 1. Components
 
-The project employs a dual-routing architecture tailored for local development and private ephemeral preview environments:
+| Service | Tech | Role |
+| :--- | :--- | :--- |
+| `web` | Next.js 15 App Router, React 19, NextAuth v5, port 3000 | UI, OIDC login, **client-side encryption/decryption** (`web/lib/crypto.ts`, `web/lib/key-store.ts`) |
+| `api` | FastAPI (Python 3.12), uvicorn, port 8000 | Device keys, secret envelopes, audit. Runs Alembic migrations on start (`python -m app.db.migrate && exec uvicorn ...`). |
+| `redis` | Redis 7, **TLS only** (`--tls-port 6379 --port 0`) | Ephemeral envelopes `s:<payload_id>` with TTL, rate-limit counters `rl:<scope>:<ip>` |
+| `db` | PostgreSQL 16, **TLS** | App DB (`users`, `device_keys`, `audit_events`) and the Keycloak DB |
+| `keycloak` | Keycloak 26, served under `/keycloak` | OIDC provider, realm `secretshare`, public client `secretshare-api` |
+| `keycloak-db-init` | postgres image | Idempotently creates the Keycloak database |
+| `tls-init` | alpine + openssl | Runs `tls/generate.sh` once into the `tls-certs` volume: an internal CA plus `db` and `redis` server certificates |
+| `traefik` | Traefik | Edge router (its own service in `docker-compose.yml`; a shared global container on the staging server for previews) |
+| `tailscale` | Tailscale sidecar (preview only) | Joins the tailnet as `pr-<N>`, terminates HTTPS with a Let's Encrypt certificate via Tailscale Serve |
 
-### Local Development (`docker-compose.yml`)
-- **Traefik Ingress**: Listens on `http://localhost:${TRAEFIK_WEB_PORT:-80}`.
-- **Web UI (Next.js)**: `http://localhost/` (served from container on port 3000).
-- **NextAuth**: `http://localhost/api/auth` (intercepted with priority 150 and routed to Next.js).
-- **API & Swagger Docs**: `http://localhost/api` (Swagger UI at `http://localhost/api/docs`).
-- **Keycloak**: `http://localhost/keycloak` (`KC_HTTP_RELATIVE_PATH=/keycloak`).
-- **Datastores**: PostgreSQL (port 5432) for Keycloak and audit logging, Redis (port 6379) for ephemeral secrets and rate limiting.
+The Nginx placeholder from the MVP is gone; Next.js serves its own assets.
 
-### Ephemeral PR Preview Environments (`docker-compose.preview.yml`)
-- **Tailscale Ephemeral Node**: Each preview environment joins the Tailscale tailnet as an ephemeral node: `https://pr-<PR_NUMBER>.<tailnet>.ts.net` (e.g. `https://pr-18.tail070378.ts.net`).
-- **Automatic Let's Encrypt TLS**: Tailscale Serve terminates HTTPS on port 443 with a valid certificate generated automatically for the node's MagicDNS subdomain.
-- **WebAuthn Passkey Support**: Because the environment is served under trusted HTTPS, modern browsers treat it as a **Secure Context** (`window.isSecureContext === true`). This allows WebAuthn passkey registration and authentication to work without origin or security errors.
-- **Subdomain Routing & Traefik Ingress**:
-  - Tailscale Serve forwards both port 443 (HTTPS) and port 80 (HTTP) internally to Traefik on `http://traefik:80`.
-  - Traefik applies middleware to inject reverse-proxy headers: `X-Forwarded-Proto=https` and `X-Forwarded-Port=443`.
-  - Routing rules match the PR hostname:
-    - **Web Application**: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/`
-    - **NextAuth**: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/api/auth`
-    - **API & Docs**: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/api` (Swagger docs at `/api/docs`)
-    - **Keycloak Admin**: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/keycloak`
+### Internal TLS (PR #23)
+- The `api` service gets `TLS_CA_CERT=/certs/ca.crt` (setting `tls_ca_cert`). Redis connects with `ssl_ca_certs` and `ssl_cert_reqs="required"`. Postgres uses an SSL context built from the same CA, including inside Alembic migrations.
+- Redis hostname checking is currently off (`ssl_check_hostname=False` in `api/app/main.py`), so the certificate chain is verified but the hostname isn't.
+- Covered by `api/tests/test_tls.py`, which runs in its own `test-tls.yml` workflow.
 
 ---
 
-## 2. Traefik Routing Mechanics
+## 2. Compose Files & Environments
 
-### Ingress & Router Priorities
-Traefik evaluates rules by descending `priority`:
+| File | Used for | Ingress |
+| :--- | :--- | :--- |
+| `docker-compose.yml` | Local dev and the (manual) staging deploy. Needs `.env` (`cp .env.example .env`). | Its own `traefik` on `${TRAEFIK_WEB_PORT:-80}` and dashboard `:8080`. `http://localhost/...` |
+| `docker-compose.preview.yml` | Per-PR previews on `staging-server`, **and** a turnkey example stack with built-in defaults (`PR_NUMBER` defaults to `1`). | Attaches to the external `traefik-net` and the shared global `traefik`; the `tailscale` sidecar serves `https://pr-<N>.<tailnet>.ts.net` |
 
-| Service | Route Rule | Priority | Middleware | Target Port |
-| :--- | :--- | :---: | :--- | :---: |
-| **Keycloak** | `PathPrefix(/keycloak)` | `200` | `proto-header` (`X-Forwarded-Proto=https`, `Port=443`) | `8080` |
-| **NextAuth** | `PathPrefix(/api/auth)` | `150` | `proto-header` (routes auth to Next.js) | `3000` |
-| **API (FastAPI)** | `PathPrefix(/api)` | `100` | `proto-header`, `stripprefix` (strips `/api`) | `8000` |
-| **Web (Next.js)** | `Host(...)` / `PathPrefix(/)` | `10` | `proto-header` | `3000` |
-
-In `docker-compose.preview.yml`, all routers also match `Host("${PR_HOSTNAME}") || Host("pr-${PR_NUMBER}.staging-server")` to isolate preview traffic by domain.
-
-### FastAPI Dynamic `root_path` via Pydantic Settings
-Because Traefik strips `/api` before passing the request to the Uvicorn worker:
-- FastAPI must know its external mount path (`root_path`) so that generated OpenAPI JSON, Swagger UI bundles, and `/docs` assets resolve to `/api/docs`, `/api/openapi.json`, etc.
-- In `api/app/core/config.py`, configuration is centralized in Pydantic `Settings`:
-  ```python
-  @property
-  def root_path(self) -> str:
-      if self.api_root_path is not None:
-          return self.api_root_path
-      if self.pr_number is not None:
-          return f"/pr-{self.pr_number}/api"
-      return "/api"
-  ```
-- In `api/app/main.py`:
-  ```python
-  settings = get_settings()
-  app = FastAPI(
-      title="SecretShare API",
-      version="0.1.0",
-      root_path=settings.root_path,
-      lifespan=lifespan,
-  )
-  ```
-- In Compose environments, `API_ROOT_PATH=/api` is passed, ensuring `settings.root_path` evaluates to `"/api"` consistently.
+Both files declare `traefik-net` as `external: true`, so run `docker network create traefik-net` first.
 
 ---
 
-## 3. Frontend Architecture: Next.js 15 App Router
+## 3. Routing Model
 
-### Decommissioning of Nginx
-- In earlier MVP prototypes, `nginx:alpine` was used as a temporary static file server for vanilla HTML/JS.
-- **Nginx has been completely decommissioned and removed.**
-- The frontend is now a modern **Next.js 15 App Router** application (`web/`) built with React 19 and TypeScript:
-  - Containerized via multi-stage Node build in `web/Dockerfile`.
-  - Runs with `next start -p 3000` in production.
-  - Implements authentication via **NextAuth v5 (Auth.js)** (`web/auth.ts`).
-  - Supports client-side secret creation, custom TTL selection, and payload retrieval via `/api/secrets`.
+### Local (`docker-compose.yml`), path-based on `localhost`
+| Path | Target | Priority |
+| :--- | :--- | :---: |
+| `/keycloak` | Keycloak :8080 (`KC_HTTP_RELATIVE_PATH=/keycloak`) | 200 |
+| `/api/auth` | Next.js :3000 (NextAuth) | 150 |
+| `/api` | FastAPI :8000 (the `/api` prefix is stripped) | 100 |
+| `/` | Next.js :3000 | 10 |
+
+### Preview (`docker-compose.preview.yml`), host-based per PR
+- URL: `https://pr-<N>.tail070378.ts.net` (the tailnet domain comes from CI).
+- Every router matches `Host(`${PR_HOSTNAME:-pr-<N>.staging-server}`) || Host(`pr-<N>.staging-server`)` combined with the same path prefixes and priorities as above.
+- Tailscale Serve proxies both :443 (HTTPS) and :80 to `http://traefik:80`. A Traefik `proto-header` middleware forces `X-Forwarded-Proto=https` and `X-Forwarded-Port=443`, so Keycloak issues `https://...` issuers without `:80` (troubleshooting §1).
+- **Subdomains, not `/pr-N` paths:** WebAuthn and Web Crypto need a secure context and a stable origin per preview. Don't go back to path prefixes.
+
+### FastAPI `root_path`
+Traefik strips `/api`, so FastAPI must know its external prefix in order to generate correct Swagger and OpenAPI URLs. `Settings.root_path` (in `api/app/core/config.py`) resolves in this order:
+1. `API_ROOT_PATH` if set.
+2. `/pr-<PR_NUMBER>/api` if `PR_NUMBER` is set.
+3. `/api` otherwise.
+
+Both compose files set `API_ROOT_PATH=/api`.
+
+---
+
+## 4. Configuration
+
+All runtime configuration goes through `app.core.config.Settings` (pydantic-settings; env vars or `.env`, case-insensitive). **Don't call `os.getenv` in app code.** Key fields:
+
+| Setting | Default | Notes |
+| :--- | :--- | :--- |
+| `ENVIRONMENT` | `development` | `production` fails fast without `DATABASE_URL` / `KEYCLOAK_*` |
+| `SECRET_TTL_SECONDS` / `_MIN_` / `_MAX_` | 600 / 300 / 86400 | Validated `min ≤ default ≤ max` |
+| `MAX_PAYLOAD_BYTES` | 65536 | UTF-8 bytes; the body middleware allows +1 KB of JSON overhead |
+| `CREATE_RATE_LIMIT` / `RETRIEVE_RATE_LIMIT` / `RATE_LIMIT_WINDOW_SECONDS` | 10 / 30 / 60 | Keyed by `request.client.host` in Redis. **Caveat:** uvicorn runs with `--proxy-headers` but no `--forwarded-allow-ips`, so it only trusts `127.0.0.1`. Behind Traefik the "client" is Traefik's container IP, so all users share one bucket (see roadmap known issues). |
+| `TLS_CA_CERT` | unset | Enables TLS verification for Redis and Postgres |
+| `AUDIT_ENABLED` | true | |
+
+The request schemas read the TTL and size bounds **at import time** (so they appear in OpenAPI). The service layer re-checks TTL bounds against the live settings.

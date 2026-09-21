@@ -1,55 +1,57 @@
-# Roadmap & Guidelines for Future AI Assistants
+# Roadmap, Constraints & Known Issues
 
-## 1. User Constraints & Architectural Invariants (CRITICAL)
+## 1. Constraints (don't break these)
 
-- **Minimal, Focused Frontend Design**:
-  The Next.js frontend (`web/`) should remain lightweight, clean, and responsive. Avoid pulling in heavy component libraries, complex animation packages, or unnecessary dependencies.
-- **Routing Architecture**:
-  - Local development runs on `http://localhost/` via Traefik port 80.
-  - Preview deployments run on `https://pr-<PR_NUMBER>.<tailnet>.ts.net` via Tailscale HTTPS with automatic TLS.
-  - Do not introduce path-based prefixes (e.g. `/pr-N`) for preview environments; subdomain isolation is required for WebAuthn passkey origins.
-- **Security Invariants (Non-Negotiable)**:
-  - **AUD-6 Compliance**: Payload IDs must be passed in JSON request bodies (`POST /api/secrets/reveal`), never in URL paths or query parameters.
-  - **No Input Echoing**: Validation exceptions (422) must never reflect client input or secret text back in the response body.
-  - **Access Log Redaction**: Logging filters in `api/app/core/logging_filters.py` must remain installed at module import and in lifespan to prevent sensitive URI logging.
-- **Maintain Test Integrity**:
-  All changes must pass:
-  - Fast unit and security tests: `uv run pytest -c api/pytest.ini api/tests/`
-  - GitHub Actions pipelines: `.github/workflows/test-api.yml` and `.github/workflows/deploy-preview.yml`.
+- **Keep the frontend lean:** Next.js with plain CSS. No heavy component libraries or animation packages.
+- **Preview routing is by subdomain** (`https://pr-<N>.<tailnet>.ts.net`). Don't reintroduce `/pr-N` path prefixes: WebAuthn and Web Crypto need a secure context and a per-preview origin.
+- **Security invariants** (full table in `06_secret_lifecycle_and_e2e_encryption.md` §4):
+  - The server stays blind to secret contents; it judges size only.
+  - Single delivery, via the atomic recipient-checked burn.
+  - Unknown, burned and expired ids are indistinguishable.
+  - Nothing secret is logged, and payload ids never appear in URLs (AUD-6).
+  - 422 responses never echo input.
+- **Configuration goes through `Settings`**, never `os.getenv` in app code.
+- **Tests stay green** in `test-api.yml`, `test-tls.yml` and the preview smoke battery. Security tests must not be skipped in CI.
+
+See `07_working_conventions.md` for how changes are verified and merged.
 
 ---
 
-## 2. Completed Milestones
+## 2. Completed
 
-- [x] **Next.js 15 App Router Frontend**: Replaced static Nginx placeholder with Next.js 15, React 19, TypeScript, and NextAuth v5.
-- [x] **Tailscale HTTPS Preview Subdomains**: Ephemeral preview containers with automatic Let's Encrypt TLS certificates.
-- [x] **WebAuthn Passkey Support**: Enabled in preview environments via browser-recognized Secure Contexts (`https://*.ts.net`).
-- [x] **Centralized Runtime Configuration**: `app.core.config.Settings` via `pydantic-settings` replacing all scattered `os.getenv` calls.
-- [x] **Configurable Secret TTL & Payload Limits**: Configurable TTL (5 min – 24 hours), 64 KB payload size enforcement, and domain exceptions.
-- [x] **Automatic Alembic Migrations**: Synchronous database schema migration runner on container startup.
-- [x] **Swagger UI / ReDoc CSP Fix**: Dedicated CSP policy allowing CDN bundles on documentation routes.
+| PR | Change |
+| :--- | :--- |
+| #18 | Tailscale HTTPS preview subdomains, Keycloak HTTPS issuer fixes, Swagger CSP |
+| #19 | Centralized `pydantic-settings` configuration |
+| #20 | Configurable TTL (5 min–24 h), byte-based 64 KB limit, domain exceptions, 422 without input echo |
+| #21 | Alembic migrations on container start (audit log was silently empty before) |
+| #22 | **E2E hybrid encryption:** per-device RSA-OAEP keys (IndexedDB), AES-256-GCM envelopes addressed to a recipient, auth-gated reveal, `/exists` pre-check, device key registry |
+| #23 | Internal TLS for Postgres and Redis (`tls-init`, internal CA), `test-tls.yml` |
+| #24, #25 | `docker-compose.preview.yml` doubles as a turnkey example stack; staging deploy made manual; git-divergence fix |
+| #26 | **Denied reveal no longer burns the secret** (Lua burn); 21 stale tests fixed; preview smoke tests actually run now |
+| #27 | `exists` moved from `GET /secrets/{id}/exists` to `POST /secrets/exists` (AUD-6) |
+
+Note: the earlier plan of keeping the AES key in the URL `#fragment` was **not** built. #22 chose recipient-addressed envelopes with per-device RSA keys instead.
 
 ---
 
-## 3. Upcoming Feature Roadmap
+## 3. Known Issues / Next Candidates
 
-### A. Client-Side End-to-End Encryption (Zero-Knowledge Architecture)
-- Encrypt secret plaintext in the user's browser using Web Crypto API (`AES-GCM-256`) before transmission.
-- The decryption key is encoded in the URL hash fragment (`#key=...`) upon creation.
-- Because URL hash fragments are never sent to the server in HTTP requests:
-  - The API receives and stores only AES ciphertext.
-  - The server remains completely blind to the secret contents, achieving true zero-knowledge privacy.
+Ordered roughly by impact.
 
-### B. Authenticated User Dashboard
-- For users authenticated via Keycloak:
-  - Display active secrets created by the user (`sub`).
-  - Provide an option to manually burn a secret before its TTL expires.
-  - Display audit access metadata (burn timestamp, client IP, user agent) without exposing secret plaintext.
+1. **Staging is down.** Manual deploys fail: there's no `.env` on the server and `docker-compose.yml`'s Traefik conflicts with the shared one (troubleshooting §13).
+2. **Rate limits are global behind Traefik.** uvicorn doesn't trust forwarded headers from Traefik, so all users share one bucket (troubleshooting §14). Fix it with `--forwarded-allow-ips`.
+3. **Decrypt-after-burn loss.** A recipient opening a secret on a device that isn't among `encrypted_keys` burns it and can't decrypt it. The client should send its `device_id`, and the server should refuse without burning when there's no match.
+4. **Device private keys are `extractable: true`.** Prefer non-extractable `CryptoKey` objects in IndexedDB.
+5. **`GET /api/keys/{user_id}` is unauthenticated** and allows username enumeration (404 vs 200). Consider requiring auth and returning a uniform response.
+6. **Redis TLS hostname isn't checked** (`ssl_check_hostname=False`); only the certificate chain is verified.
+7. **Only one test user in the realm.** Add a second user (e.g. `testuser2`) so the smoke tests can do a full "B denied → A succeeds" run end to end rather than via a non-existent recipient.
 
-### C. WebAuthn Passkey Registration Flow in UI
-- Leverage Keycloak's WebAuthn support to allow users to register biometric or hardware passkeys directly from the SecretShare frontend interface.
+---
 
-### D. Production Deployment with Custom Domain
-- Final production deployment strategy for the `main` branch:
-  - Configure production reverse proxy with a custom public domain (e.g. `secretshare.io`).
-  - Automated certificate provisioning via Let's Encrypt (ACME).
+## 4. Feature Ideas (not started)
+
+- **Sender dashboard:** list a user's active secrets (by creator `sub`), burn early, and view audit metadata (no plaintext). This needs a creator field on envelopes and audit rows (`actor_user_id` exists but isn't populated yet).
+- **WebAuthn / passkey registration in the UI**, using Keycloak's WebAuthn support (previews already run in a secure context).
+- **Slack / Teams platforms:** the `users.platform` and `device_keys.platform` columns already allow `slack`, `teams`, `keycloak` and `web`.
+- **Production deployment** on a custom domain with ACME certificates.

@@ -1,53 +1,34 @@
-# AI Agent Context & Knowledge Base
+# Project Context & Knowledge Base
 
-Welcome! This directory contains the complete technical context, architectural decisions, solved edge cases, and future roadmaps for the **SecretShare** project. If you are an AI assistant picking up this repository, read these documents before making changes.
+Technical context, decisions, solved problems and open issues for **SecretShare**. If you're picking up this repository (human or AI assistant), read these before making changes. Last updated **2026-09-21** (through PR #27).
 
----
+## What SecretShare is
 
-## Index of Context Documents
+A one-time secret relay with **end-to-end encryption**. A signed-in sender addresses a secret to a Keycloak user. The browser encrypts it (AES-256-GCM, with the key wrapped by RSA-OAEP for each of the recipient's devices) and the API stores only the encrypted envelope in Redis with a TTL. The recipient reveals it once: the API checks that the caller is the recipient and deletes the envelope atomically, and the browser decrypts it locally.
 
-1. [`01_architecture_and_routing.md`](01_architecture_and_routing.md)
-   - Dual routing architecture: Local development (`localhost`) vs. Ephemeral PR Preview Environments (`pr-<N>.<tailnet>.ts.net`).
-   - Next.js App Router frontend on port 3000 (Nginx has been decommissioned).
-   - Traefik reverse proxy configuration, priority rules, and prefix stripping.
-   - FastAPI dynamic `root_path` via centralized Pydantic Settings.
+Stack: Next.js 15 + NextAuth v5 · FastAPI · Redis 7 (TLS) · PostgreSQL 16 (TLS, audit log and device keys) · Keycloak 26 · Traefik · Tailscale (HTTPS previews).
 
-2. [`02_authentication_and_keycloak.md`](02_authentication_and_keycloak.md)
-   - OIDC Authorization Code Flow with PKCE (RFC 7636).
-   - Keycloak realm configuration, wildcard/preview redirect URIs, and HTTPS issuer configuration.
-   - NextAuth v5 (Auth.js) frontend integration with Keycloak provider and session management.
-   - Backend PyJWT + PyJWKClient token verification against Keycloak JWKS.
-   - Secure Context and WebAuthn passkey readiness over Tailscale HTTPS.
+## Index
 
-3. [`03_troubleshooting_and_edge_cases.md`](03_troubleshooting_and_edge_cases.md)
-   - **Crucial debugging log**: Detailed root causes and solutions for subtle edge cases encountered:
-     - Keycloak HTTPS issuer port 80 leakage in OIDC discovery.
-     - Persistent Keycloak database redirect URI synchronization.
-     - Tailscale Serve dual-port proxying and local runner `/etc/hosts` resolution.
-     - FastAPI Swagger UI / ReDoc Content Security Policy (CSP) allowlisting.
-     - NextAuth v5 reverse proxy URL handling.
-     - Alembic migrations automation on container startup.
-     - Pydantic Settings centralization and merge conflict resolution.
-     - RFC 3986 relative URL resolution, Web Cryptography secure contexts, and Compose variable escaping (`$$`).
+| File | Read it when you're... |
+| :--- | :--- |
+| [`01_architecture_and_routing.md`](01_architecture_and_routing.md) | touching compose files, Traefik routing, internal TLS, `Settings` |
+| [`02_authentication_and_keycloak.md`](02_authentication_and_keycloak.md) | touching login, tokens, the realm, or which endpoints require auth |
+| [`03_troubleshooting_and_edge_cases.md`](03_troubleshooting_and_edge_cases.md) | debugging anything; it's a log of every non-obvious failure and its fix, including open ones |
+| [`04_ci_cd_and_deployment.md`](04_ci_cd_and_deployment.md) | touching workflows, preview deploys, smoke scripts, staging |
+| [`05_roadmap_and_next_steps.md`](05_roadmap_and_next_steps.md) | planning work: constraints, completed PRs, known issues, ideas |
+| [`06_secret_lifecycle_and_e2e_encryption.md`](06_secret_lifecycle_and_e2e_encryption.md) | touching secrets, keys, the Redis store, or the web crypto; also the API reference and invariants |
+| [`07_working_conventions.md`](07_working_conventions.md) | about to make a change: how to verify on the server, test helpers, git/PR rules |
 
-4. [`04_ci_cd_and_deployment.md`](04_ci_cd_and_deployment.md)
-   - GitHub Actions workflows: `test-api.yml` (unit, config, migrate, security, integration) and `deploy-preview.yml`.
-   - Ephemeral preview deployment with Tailscale container sidecar and Let's Encrypt TLS.
-   - Automated preview verification battery: routing, Swagger docs, Keycloak auth exchange, and secret lifecycle.
-   - Prominent preview URL reporting in GITHUB_STEP_SUMMARY, console banner, and sticky PR comments.
+## Current Status (2026-09-21)
 
-5. [`05_roadmap_and_next_steps.md`](05_roadmap_and_next_steps.md)
-   - User preferences and behavioral constraints (clean Next.js design, maintain test suites).
-   - Completed milestones: Next.js migration, HTTPS subdomain preview, Pydantic settings, configurable TTLs.
-   - Upcoming features: Client-side AES-GCM encryption, authenticated secret dashboard, WebAuthn UI flows.
+- `main` is green: `Test API` and `Test TLS` pass. Every PR gets a live preview at `https://pr-<N>.tail070378.ts.net`, and its smoke battery now really runs (it silently didn't before #26).
+- Recent: #26 fixed "a denied reveal burns the secret"; #27 moved `exists` out of the URL.
+- **Open problems:**
+  - staging deploy broken (troubleshooting §13)
+  - rate limits shared by everyone behind Traefik (§14)
+  - decrypt-after-burn loss on unregistered devices (roadmap §3)
 
----
+## Keep this folder current
 
-## Current Project Status
-- **Active Branch**: `main`
-- **Recent Merged PRs**:
-  - PR #18 (`feat/infra-fix`): Ephemeral Tailscale HTTPS preview subdomains, WebAuthn enablement, Keycloak HTTPS issuer fixes, and Swagger CSP.
-  - PR #19 (`feat/settings-config`): Centralized runtime configuration via `pydantic-settings`.
-  - PR #20 (`feat/secret-ttl-exceptions`): Configurable secret TTL, payload byte limits, domain exceptions, sanitized 422 errors.
-  - PR #21 (`fix/run-migrations-on-start`): Automatic Alembic migrations on API container start.
-- **Current State**: Fully functional, Next.js 15 App Router web UI, NextAuth v5 OIDC login, FastAPI backend with Redis ephemeral storage & Postgres audit logging, live preview CI/CD with valid Let's Encrypt HTTPS certificates.
+Update these files in the same PR as the change they describe. This applies especially to the API reference (06 §2), the smoke battery (04 §4), known issues (05 §3), and any new failure mode worth a troubleshooting entry (03).
