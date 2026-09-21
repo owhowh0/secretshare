@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from app.api.errors import register_exception_handlers
+from app.api.routes.keys import router as keys_router
 from app.api.routes.secrets import router as secrets_router
 from app.core.auth import get_current_user
 from app.core.config import get_settings
@@ -78,6 +79,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(secrets_router)
+app.include_router(keys_router)
 register_exception_handlers(app)
 
 
