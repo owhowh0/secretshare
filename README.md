@@ -71,7 +71,10 @@ The `docker-compose.preview.yml` compose file is configured as a turnkey, self-c
 git clone https://github.com/owhowh0/secretshare.git
 cd secretshare
 
-# 2. Deploy the example preview stack
+# 2. Ensure shared network exists
+docker network create traefik-net 2>/dev/null || true
+
+# 3. Deploy the example preview stack
 docker compose -f docker-compose.preview.yml up -d --build
 ```
 
