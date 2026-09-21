@@ -1,16 +1,18 @@
 from app.core.audit import AuditService
+from app.core.auth import get_current_user
 from app.core.config import Settings, get_settings
 from app.core.rate_limit import RateLimiter
 from app.schemas.secrets import (
     SecretCreateRequest,
     SecretCreateResponse,
-    SecretRevealRequest,
+    SecretExistsResponse,
     SecretRetrieveResponse,
+    SecretRevealRequest,
 )
-from app.services.exceptions import SecretNotFoundError
+from app.services.exceptions import SecretAccessDeniedError, SecretNotFoundError
 from app.services.secrets import SecretService
 from app.storage.redis_store import SecretStore
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 router = APIRouter(
     prefix="/secrets",
@@ -63,7 +65,13 @@ async def create_secret(
     service: SecretService = Depends(get_secret_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> SecretCreateResponse:
-    created = await service.create_secret(payload.ciphertext, payload.ttl_seconds)
+    created = await service.create_secret(
+        recipient_id=payload.recipient_id,
+        encrypted_keys=payload.encrypted_keys,
+        iv=payload.iv,
+        ciphertext=payload.ciphertext,
+        ttl_seconds=payload.ttl_seconds,
+    )
 
     await audit.record(
         "created",
@@ -79,6 +87,19 @@ async def create_secret(
     )
 
 
+@router.get(
+    "/{payload_id}/exists",
+    response_model=SecretExistsResponse,
+    dependencies=[Depends(retrieve_rate_limit)],
+)
+async def check_secret_exists(
+    payload_id: str,
+    service: SecretService = Depends(get_secret_service),
+) -> SecretExistsResponse:
+    exists = await service.check_exists(payload_id)
+    return SecretExistsResponse(exists=exists)
+
+
 # The payload id is the capability that unlocks a secret, so it travels in the
 # request body, never in the URL path (AUD-6). A path id is copied verbatim into
 # uvicorn's access log, proxy logs, and browser history, which would put a live
@@ -91,14 +112,24 @@ async def create_secret(
 async def reveal_secret(
     request: Request,
     payload: SecretRevealRequest,
+    claims: dict = Depends(get_current_user),
     service: SecretService = Depends(get_secret_service),
     audit: AuditService = Depends(get_audit_service),
 ) -> SecretRetrieveResponse:
+    caller_identity = claims.get("preferred_username") or claims.get("sub")
+    if not caller_identity:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Authenticated token missing user identifier.",
+        )
+
     payload_id = payload.payload_id
     try:
-        ciphertext = await service.retrieve_secret(payload_id)
-    except SecretNotFoundError:
-        # Audited here, then re-raised for the domain handler to turn into 404.
+        envelope = await service.retrieve_secret(
+            payload_id, caller_identity=caller_identity
+        )
+    except (SecretNotFoundError, SecretAccessDeniedError):
+        # Audited here, then re-raised for the domain handler to turn into 404 / 403.
         await audit.record(
             "denied",
             payload_id=payload_id,
@@ -114,4 +145,9 @@ async def reveal_secret(
         user_agent=request.headers.get("user-agent"),
     )
 
-    return SecretRetrieveResponse(ciphertext=ciphertext)
+    return SecretRetrieveResponse(
+        recipient_id=envelope.recipient_id,
+        encrypted_keys=envelope.encrypted_keys,
+        iv=envelope.iv,
+        ciphertext=envelope.ciphertext,
+    )

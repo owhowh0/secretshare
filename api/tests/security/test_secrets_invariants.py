@@ -13,6 +13,7 @@ default `pytest` run stays offline. Run them with:
 
 import asyncio
 import os
+from uuid import UUID
 
 import pytest
 import pytest_asyncio
@@ -22,9 +23,11 @@ from app.api.routes.secrets import (
     get_secret_service,
     retrieve_rate_limit,
 )
+from app.core.auth import get_current_user
 from app.core.config import Settings, get_settings
 from app.core.ids import new_payload_id
 from app.main import app
+from app.schemas.secrets import EncryptedKeyItem
 from app.services.exceptions import SecretNotFoundError
 from app.services.secrets import SecretService
 from app.storage.redis_store import SecretStore
@@ -33,12 +36,28 @@ from redis.asyncio import Redis
 
 REDIS_URL = os.getenv("TEST_REDIS_URL")
 
-requires_redis = pytest.mark.skipif(
-    not REDIS_URL, reason="TEST_REDIS_URL is not set"
-)
+requires_redis = pytest.mark.skipif(not REDIS_URL, reason="TEST_REDIS_URL is not set")
 
 CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
 TTL_SECONDS = 600
+RECIPIENT_ID = "alice"
+OTHER_USER_ID = "bob"
+DEVICE_ID = UUID("00000000-0000-0000-0000-000000000001")
+ENCRYPTED_KEY_ITEMS = [
+    EncryptedKeyItem(
+        device_id=DEVICE_ID,
+        platform="web",
+        encrypted_aes_key="ZW5jcnlwdGVkLWtleQ==",
+    )
+]
+ENCRYPTED_KEYS = [
+    {
+        "device_id": str(DEVICE_ID),
+        "platform": "web",
+        "encrypted_aes_key": "ZW5jcnlwdGVkLWtleQ==",
+    }
+]
+IV = "MTIzNDU2Nzg5MDEy"
 
 
 class NullAuditService:
@@ -75,6 +94,10 @@ async def client(redis):
     app.dependency_overrides[get_settings] = lambda: Settings()
     app.dependency_overrides[create_rate_limit] = lambda: None
     app.dependency_overrides[retrieve_rate_limit] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: {
+        "preferred_username": RECIPIENT_ID,
+        "sub": "auth-sub-alice",
+    }
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -85,32 +108,61 @@ async def client(redis):
     app.state.redis = None
 
 
+def _make_payload(**custom_fields):
+    return {
+        "recipient_id": RECIPIENT_ID,
+        "encrypted_keys": ENCRYPTED_KEYS,
+        "iv": IV,
+        "ciphertext": CIPHERTEXT,
+        **custom_fields,
+    }
+
+
 class TestAtomicBurn:
     """Invariant 3: two concurrent readers must never both receive the secret."""
 
     @requires_redis
     async def test_burn_is_single_delivery(self, service):
         for _ in range(5):
-            payload_id = (await service.create_secret(CIPHERTEXT)).payload_id
+            payload_id = (
+                await service.create_secret(
+                    recipient_id=RECIPIENT_ID,
+                    encrypted_keys=ENCRYPTED_KEY_ITEMS,
+                    iv=IV,
+                    ciphertext=CIPHERTEXT,
+                )
+            ).payload_id
 
             results = await asyncio.gather(
-                *[service.retrieve_secret(payload_id) for _ in range(20)],
+                *[
+                    service.retrieve_secret(payload_id, caller_identity=RECIPIENT_ID)
+                    for _ in range(20)
+                ],
                 return_exceptions=True,
             )
 
-            winners = [r for r in results if isinstance(r, str)]
+            winners = [r for r in results if not isinstance(r, Exception)]
             misses = [r for r in results if isinstance(r, SecretNotFoundError)]
             assert len(winners) == 1, f"{len(winners)} readers received the secret"
-            assert winners[0] == CIPHERTEXT
+            assert winners[0].ciphertext == CIPHERTEXT
             assert len(misses) == 19
 
     @requires_redis
     async def test_second_read_is_a_miss(self, service):
-        payload_id = (await service.create_secret(CIPHERTEXT)).payload_id
+        payload_id = (
+            await service.create_secret(
+                recipient_id=RECIPIENT_ID,
+                encrypted_keys=ENCRYPTED_KEY_ITEMS,
+                iv=IV,
+                ciphertext=CIPHERTEXT,
+            )
+        ).payload_id
 
-        assert await service.retrieve_secret(payload_id) == CIPHERTEXT
+        assert (
+            await service.retrieve_secret(payload_id, caller_identity=RECIPIENT_ID)
+        ).ciphertext == CIPHERTEXT
         with pytest.raises(SecretNotFoundError):
-            await service.retrieve_secret(payload_id)
+            await service.retrieve_secret(payload_id, caller_identity=RECIPIENT_ID)
 
 
 class TestNoEnumerationOracle:
@@ -118,12 +170,16 @@ class TestNoEnumerationOracle:
 
     @requires_redis
     async def test_missing_and_burned_are_identical(self, client):
-        created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        created = await client.post("/secrets", json=_make_payload())
         payload_id = created.json()["payload_id"]
-        assert (await client.post("/secrets/reveal", json={"payload_id": payload_id})).status_code == 200
+        assert (
+            await client.post("/secrets/reveal", json={"payload_id": payload_id})
+        ).status_code == 200
 
         burned = await client.post("/secrets/reveal", json={"payload_id": payload_id})
-        never_existed = await client.post("/secrets/reveal", json={"payload_id": new_payload_id()})
+        never_existed = await client.post(
+            "/secrets/reveal", json={"payload_id": new_payload_id()}
+        )
 
         assert burned.status_code == never_existed.status_code == 404
         assert burned.content == never_existed.content
@@ -158,7 +214,9 @@ class TestPayloadSizeLimit:
         oversized = "A" * (settings.max_payload_bytes + 1)
 
         before = len(await redis.keys("s:*"))
-        response = await client.post("/secrets", json={"ciphertext": oversized})
+        response = await client.post(
+            "/secrets", json=_make_payload(ciphertext=oversized)
+        )
         after = len(await redis.keys("s:*"))
 
         assert response.status_code in (413, 422)
@@ -169,7 +227,9 @@ class TestPayloadSizeLimit:
         settings = Settings()
         at_limit = "A" * settings.max_payload_bytes
 
-        response = await client.post("/secrets", json={"ciphertext": at_limit})
+        response = await client.post(
+            "/secrets", json=_make_payload(ciphertext=at_limit)
+        )
 
         assert response.status_code == 201
 
@@ -179,7 +239,7 @@ class TestTtl:
 
     @requires_redis
     async def test_ttl_is_set(self, client, redis):
-        created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        created = await client.post("/secrets", json=_make_payload())
         payload_id = created.json()["payload_id"]
 
         ttl = await redis.ttl(f"s:{payload_id}")
@@ -189,9 +249,7 @@ class TestTtl:
 
     @requires_redis
     async def test_requested_ttl_reaches_redis(self, client, redis):
-        created = await client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT, "ttl_seconds": 3600}
-        )
+        created = await client.post("/secrets", json=_make_payload(ttl_seconds=3600))
         assert created.status_code == 201
         payload_id = created.json()["payload_id"]
 
@@ -203,7 +261,7 @@ class TestTtl:
     async def test_ttl_above_maximum_never_reaches_redis(self, client, redis):
         before = len(await redis.keys("s:*"))
         response = await client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT, "ttl_seconds": 86400 + 1}
+            "/secrets", json=_make_payload(ttl_seconds=86400 + 1)
         )
         after = len(await redis.keys("s:*"))
 
@@ -216,7 +274,7 @@ class TestSecurityHeaders:
 
     @requires_redis
     async def test_reveal_response_is_not_cacheable(self, client):
-        created = await client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        created = await client.post("/secrets", json=_make_payload())
         payload_id = created.json()["payload_id"]
 
         response = await client.post("/secrets/reveal", json={"payload_id": payload_id})
@@ -226,7 +284,9 @@ class TestSecurityHeaders:
 
     @requires_redis
     async def test_headers_present_on_a_miss_too(self, client):
-        response = await client.post("/secrets/reveal", json={"payload_id": new_payload_id()})
+        response = await client.post(
+            "/secrets/reveal", json={"payload_id": new_payload_id()}
+        )
 
         assert response.status_code == 404
         assert "no-store" in response.headers["cache-control"]

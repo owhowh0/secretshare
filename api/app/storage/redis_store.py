@@ -7,9 +7,13 @@ class SecretStore:
     def __init__(self, redis: Redis):
         self._redis = redis
 
-    # store in redis with automated timer
-    async def put(self, payload_id: str, ciphertext: str, *, ttl_seconds: int) -> None:
-        await self._redis.set(f"s:{payload_id}", ciphertext, ex=ttl_seconds)
+    # store envelope payload in redis with automated expiration TTL
+    async def put(self, payload_id: str, payload: str, *, ttl_seconds: int) -> None:
+        await self._redis.set(f"s:{payload_id}", payload, ex=ttl_seconds)
+
+    # Non-destructive check for bot previews and existence verification
+    async def exists(self, payload_id: str) -> bool:
+        return bool(await self._redis.exists(f"s:{payload_id}"))
 
     # retrieves data and instantly destroys
     async def burn(self, payload_id: str) -> str | None:

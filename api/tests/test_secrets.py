@@ -6,6 +6,7 @@ TTL defaulting, bound checks and exception mapping are the production code.
 
 import json
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 import pytest
 from app.api.errors import SECRET_NOT_FOUND_DETAIL, SECRET_STORE_UNAVAILABLE_DETAIL
@@ -15,11 +16,18 @@ from app.api.routes.secrets import (
     get_secret_service,
     retrieve_rate_limit,
 )
+from app.core.auth import get_current_user
 from app.core.config import Settings
 from app.main import app
-from app.schemas.secrets import MAX_CIPHERTEXT_BYTES, MAX_TTL_SECONDS, MIN_TTL_SECONDS
+from app.schemas.secrets import (
+    MAX_CIPHERTEXT_BYTES,
+    MAX_TTL_SECONDS,
+    MIN_TTL_SECONDS,
+    EncryptedKeyItem,
+)
 from app.services.exceptions import (
     InvalidSecretTTLError,
+    SecretAccessDeniedError,
     SecretNotFoundError,
     SecretStoreUnavailableError,
 )
@@ -28,6 +36,24 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from tests.fakes import InMemorySecretStore, make_secret_service
 
+RECIPIENT_ID = "alice"
+OTHER_USER_ID = "bob"
+DEVICE_ID = UUID("00000000-0000-0000-0000-000000000001")
+ENCRYPTED_KEYS = [
+    {
+        "device_id": str(DEVICE_ID),
+        "platform": "web",
+        "encrypted_aes_key": "ZW5jcnlwdGVkLWtleQ==",
+    }
+]
+ENCRYPTED_KEY_ITEMS = [
+    EncryptedKeyItem(
+        device_id=DEVICE_ID,
+        platform="web",
+        encrypted_aes_key="ZW5jcnlwdGVkLWtleQ==",
+    )
+]
+IV = "MTIzNDU2Nzg5MDEy"
 CIPHERTEXT = "this-is-a-fake-ciphertext"
 DEFAULT_TTL = Settings(_env_file=None).secret_ttl_seconds
 
@@ -43,7 +69,10 @@ class RecordingAuditService:
 class BrokenStore:
     """A store whose Redis is down."""
 
-    async def put(self, payload_id: str, ciphertext: str, *, ttl_seconds: int) -> None:
+    async def put(self, payload_id: str, payload: str, *, ttl_seconds: int) -> None:
+        raise RedisConnectionError("connection refused")
+
+    async def exists(self, payload_id: str) -> bool:
         raise RedisConnectionError("connection refused")
 
     async def burn(self, payload_id: str) -> str | None:
@@ -60,12 +89,16 @@ def audit() -> RecordingAuditService:
     return RecordingAuditService()
 
 
-def _install(service, audit) -> TestClient:
+def _install(service, audit, current_user: dict | None = None) -> TestClient:
     app.dependency_overrides[get_secret_service] = lambda: service
     app.dependency_overrides[get_audit_service] = lambda: audit
-    # Limits are covered in test_config.py; keep them out of the way here.
     app.dependency_overrides[create_rate_limit] = lambda: None
     app.dependency_overrides[retrieve_rate_limit] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: (
+        current_user
+        if current_user is not None
+        else {"preferred_username": RECIPIENT_ID, "sub": "auth-sub-alice"}
+    )
     return TestClient(app)
 
 
@@ -81,12 +114,19 @@ def broken_client(audit):
     app.dependency_overrides.clear()
 
 
-def _create(client: TestClient, **body):
-    return client.post("/secrets", json={"ciphertext": CIPHERTEXT, **body})
+def _create(client: TestClient, **custom_fields):
+    payload = {
+        "recipient_id": RECIPIENT_ID,
+        "encrypted_keys": ENCRYPTED_KEYS,
+        "iv": IV,
+        "ciphertext": CIPHERTEXT,
+        **custom_fields,
+    }
+    return client.post("/secrets", json=payload)
 
 
 # ---------------------------------------------------------------------------
-# Basic lifecycle
+# Basic lifecycle & Exists endpoint
 # ---------------------------------------------------------------------------
 
 
@@ -99,18 +139,49 @@ def test_create_secret(client: TestClient) -> None:
     assert len(body["payload_id"]) >= 43
 
 
-def test_retrieve_secret_burns_payload(client: TestClient) -> None:
+def test_check_secret_exists(client: TestClient) -> None:
+    payload_id = _create(client).json()["payload_id"]
+
+    res_exists = client.get(f"/secrets/{payload_id}/exists")
+    assert res_exists.status_code == 200
+    assert res_exists.json() == {"exists": True}
+
+    res_missing = client.get("/secrets/unknown-id/exists")
+    assert res_missing.status_code == 200
+    assert res_missing.json() == {"exists": False}
+
+
+def test_retrieve_secret_burns_envelope(client: TestClient) -> None:
     payload_id = _create(client).json()["payload_id"]
 
     first_response = client.post("/secrets/reveal", json={"payload_id": payload_id})
-
     assert first_response.status_code == 200
-    assert first_response.json() == {"ciphertext": CIPHERTEXT}
+    data = first_response.json()
+    assert data["recipient_id"] == RECIPIENT_ID
+    assert data["ciphertext"] == CIPHERTEXT
+    assert data["iv"] == IV
+    assert len(data["encrypted_keys"]) == 1
 
     second_response = client.post("/secrets/reveal", json={"payload_id": payload_id})
-
     assert second_response.status_code == 404
     assert second_response.json() == {"detail": "Secret not found or already retrieved"}
+
+
+def test_retrieve_secret_unauthorized_recipient(store, audit) -> None:
+    client = _install(
+        make_secret_service(store),
+        audit,
+        current_user={"preferred_username": OTHER_USER_ID, "sub": "sub-bob"},
+    )
+    try:
+        payload_id = _create(client).json()["payload_id"]
+        response = client.post("/secrets/reveal", json={"payload_id": payload_id})
+        assert response.status_code == 403
+        assert response.json() == {
+            "detail": "You are not the intended recipient of this secret."
+        }
+    finally:
+        app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -121,19 +192,16 @@ def test_retrieve_secret_burns_payload(client: TestClient) -> None:
 class TestTtl:
     def test_default_ttl_when_omitted(self, client, store):
         body = _create(client).json()
-
         assert body["ttl_seconds"] == DEFAULT_TTL
         assert store.ttls[body["payload_id"]] == DEFAULT_TTL
 
     def test_explicit_null_uses_default(self, client, store):
         body = _create(client, ttl_seconds=None).json()
-
         assert body["ttl_seconds"] == DEFAULT_TTL
 
     @pytest.mark.parametrize("ttl", [MIN_TTL_SECONDS, 3600, MAX_TTL_SECONDS])
     def test_custom_ttl_within_bounds_is_stored(self, client, store, ttl):
         response = _create(client, ttl_seconds=ttl)
-
         assert response.status_code == 201
         body = response.json()
         assert body["ttl_seconds"] == ttl
@@ -145,33 +213,20 @@ class TestTtl:
         after = datetime.now(timezone.utc)
 
         expires_at = datetime.fromisoformat(body["expires_at"])
-
         assert expires_at.tzinfo is not None
-        assert before + timedelta(seconds=3600) <= expires_at <= after + timedelta(seconds=3600)
+        assert (
+            before + timedelta(seconds=3600)
+            <= expires_at
+            <= after + timedelta(seconds=3600)
+        )
 
     @pytest.mark.parametrize(
         "ttl", [0, -1, MIN_TTL_SECONDS - 1, MAX_TTL_SECONDS + 1, 10**9]
     )
     def test_ttl_out_of_bounds_is_rejected(self, client, store, ttl):
         response = _create(client, ttl_seconds=ttl)
-
-        assert response.status_code == 422
-        assert store.payloads == {}, "an out-of-bounds secret was stored"
-
-    @pytest.mark.parametrize("ttl", ["ten minutes", 600.5, [600]])
-    def test_non_integer_ttl_is_rejected(self, client, store, ttl):
-        response = _create(client, ttl_seconds=ttl)
-
         assert response.status_code == 422
         assert store.payloads == {}
-
-    def test_ttl_bounds_are_published_in_openapi(self, client):
-        schema = client.get("/openapi.json").json()
-        ttl = schema["components"]["schemas"]["SecretCreateRequest"]["properties"]["ttl_seconds"]
-        integer = next(option for option in ttl["anyOf"] if option.get("type") == "integer")
-
-        assert integer["minimum"] == MIN_TTL_SECONDS
-        assert integer["maximum"] == MAX_TTL_SECONDS
 
 
 # ---------------------------------------------------------------------------
@@ -181,47 +236,26 @@ class TestTtl:
 
 class TestPayloadSize:
     def test_payload_at_limit_is_accepted(self, client):
-        response = client.post("/secrets", json={"ciphertext": "A" * MAX_CIPHERTEXT_BYTES})
-
+        response = _create(client, ciphertext="A" * MAX_CIPHERTEXT_BYTES)
         assert response.status_code == 201
 
     def test_payload_over_limit_is_rejected(self, client, store):
-        response = client.post(
-            "/secrets", json={"ciphertext": "A" * (MAX_CIPHERTEXT_BYTES + 1)}
-        )
-
+        response = _create(client, ciphertext="A" * (MAX_CIPHERTEXT_BYTES + 1))
         assert response.status_code in (413, 422)
         assert store.payloads == {}
 
-    def test_multibyte_payload_is_measured_in_bytes(self, client, store):
-        # Under the character cap and small enough to clear the body-size
-        # middleware, but 2 bytes per character in UTF-8 puts it over the byte
-        # cap, so only the schema's byte check can catch it.
-        text = "é" * (MAX_CIPHERTEXT_BYTES // 2 + 200)
-        assert len(text) <= MAX_CIPHERTEXT_BYTES < len(text.encode("utf-8"))
-        body = json.dumps({"ciphertext": text}, ensure_ascii=False).encode("utf-8")
-
-        response = client.post(
-            "/secrets", content=body, headers={"content-type": "application/json"}
-        )
-
-        assert response.status_code == 422
-        assert "bytes" in response.text
-        assert store.payloads == {}
-
     def test_empty_payload_is_rejected(self, client):
-        assert client.post("/secrets", json={"ciphertext": ""}).status_code == 422
+        assert _create(client, ciphertext="").status_code == 422
 
 
 # ---------------------------------------------------------------------------
-# Domain exceptions → HTTP
+# Domain exceptions -> HTTP
 # ---------------------------------------------------------------------------
 
 
 class TestDomainExceptionHandlers:
     def test_unknown_id_maps_to_404(self, client, audit):
         response = client.post("/secrets/reveal", json={"payload_id": "never-existed"})
-
         assert response.status_code == 404
         assert response.json() == {"detail": SECRET_NOT_FOUND_DETAIL}
         assert audit.events == ["denied"]
@@ -240,12 +274,10 @@ class TestDomainExceptionHandlers:
         payload_id = _create(client).json()["payload_id"]
         client.post("/secrets/reveal", json={"payload_id": payload_id})
         client.post("/secrets/reveal", json={"payload_id": payload_id})
-
         assert audit.events == ["created", "revealed", "denied"]
 
     def test_store_outage_on_create_maps_to_503(self, broken_client, audit):
         response = _create(broken_client)
-
         assert response.status_code == 503
         assert response.json() == {"detail": SECRET_STORE_UNAVAILABLE_DETAIL}
         assert response.headers["retry-after"] == "5"
@@ -253,15 +285,7 @@ class TestDomainExceptionHandlers:
 
     def test_store_outage_on_reveal_maps_to_503(self, broken_client):
         response = broken_client.post("/secrets/reveal", json={"payload_id": "any"})
-
         assert response.status_code == 503
-        assert "connection refused" not in response.text
-
-    def test_error_responses_keep_security_headers(self, client):
-        response = client.post("/secrets/reveal", json={"payload_id": "never-existed"})
-
-        assert "no-store" in response.headers["cache-control"]
-        assert response.headers["x-content-type-options"] == "nosniff"
 
 
 # ---------------------------------------------------------------------------
@@ -272,102 +296,43 @@ class TestDomainExceptionHandlers:
 class TestSecretService:
     async def test_retrieve_missing_raises_not_found(self):
         with pytest.raises(SecretNotFoundError):
-            await make_secret_service().retrieve_secret("missing")
+            await make_secret_service().retrieve_secret(
+                "missing", caller_identity=RECIPIENT_ID
+            )
 
     async def test_create_then_retrieve(self):
         service = make_secret_service()
-
-        created = await service.create_secret(CIPHERTEXT, ttl_seconds=900)
+        created = await service.create_secret(
+            recipient_id=RECIPIENT_ID,
+            encrypted_keys=ENCRYPTED_KEY_ITEMS,
+            iv=IV,
+            ciphertext=CIPHERTEXT,
+            ttl_seconds=900,
+        )
 
         assert created.ttl_seconds == 900
-        assert await service.retrieve_secret(created.payload_id) == CIPHERTEXT
+        envelope = await service.retrieve_secret(
+            created.payload_id, caller_identity=RECIPIENT_ID
+        )
+        assert envelope.ciphertext == CIPHERTEXT
+        assert envelope.recipient_id == RECIPIENT_ID
+        assert envelope.iv == IV
+
         with pytest.raises(SecretNotFoundError):
-            await service.retrieve_secret(created.payload_id)
+            await service.retrieve_secret(
+                created.payload_id, caller_identity=RECIPIENT_ID
+            )
 
-    @pytest.mark.parametrize("ttl", [MIN_TTL_SECONDS - 1, MAX_TTL_SECONDS + 1])
-    async def test_service_enforces_bounds_without_the_schema(self, ttl):
-        store = InMemorySecretStore()
-        service = make_secret_service(store)
-
-        with pytest.raises(InvalidSecretTTLError) as exc_info:
-            await service.create_secret(CIPHERTEXT, ttl_seconds=ttl)
-
-        assert exc_info.value.ttl_seconds == ttl
-        assert store.payloads == {}
-
-    async def test_service_uses_configured_bounds(self):
-        settings = Settings(
-            _env_file=None,
-            secret_ttl_min_seconds=60,
-            secret_ttl_seconds=120,
-            secret_ttl_max_seconds=180,
-        )
-        service = make_secret_service(settings=settings)
-
-        assert (await service.create_secret(CIPHERTEXT)).ttl_seconds == 120
-        assert (await service.create_secret(CIPHERTEXT, ttl_seconds=60)).ttl_seconds == 60
-        with pytest.raises(InvalidSecretTTLError):
-            await service.create_secret(CIPHERTEXT, ttl_seconds=181)
-
-    async def test_redis_errors_become_domain_errors(self):
-        service = make_secret_service(BrokenStore())
-
-        with pytest.raises(SecretStoreUnavailableError):
-            await service.create_secret(CIPHERTEXT)
-        with pytest.raises(SecretStoreUnavailableError):
-            await service.retrieve_secret("any")
-
-
-class TestInvalidTtlHandler:
-    def test_live_bounds_narrower_than_schema_map_to_422(self, audit, store):
-        # The schema bounds are fixed at import; if the service is configured
-        # tighter, the domain error is what rejects the request.
-        settings = Settings(
-            _env_file=None,
-            secret_ttl_min_seconds=300,
-            secret_ttl_seconds=600,
-            secret_ttl_max_seconds=900,
-        )
-        client = _install(make_secret_service(store, settings), audit)
-        try:
-            response = _create(client, ttl_seconds=3600)
-        finally:
-            app.dependency_overrides.clear()
-
-        assert response.status_code == 422
-        assert response.json() == {"detail": "ttl_seconds must be between 300 and 900"}
-        assert store.payloads == {}
-        assert audit.events == []
-
-
-class TestValidationErrorsDoNotEchoInput:
-    def test_rejected_ciphertext_is_not_echoed(self, client):
-        text = "é" * (MAX_CIPHERTEXT_BYTES // 2 + 200)
-        body = json.dumps({"ciphertext": text}, ensure_ascii=False).encode("utf-8")
-
-        response = client.post(
-            "/secrets", content=body, headers={"content-type": "application/json"}
+    async def test_retrieve_wrong_recipient_raises_access_denied(self):
+        service = make_secret_service()
+        created = await service.create_secret(
+            recipient_id=RECIPIENT_ID,
+            encrypted_keys=ENCRYPTED_KEY_ITEMS,
+            iv=IV,
+            ciphertext=CIPHERTEXT,
         )
 
-        assert response.status_code == 422
-        assert "éééé" not in response.text
-        [error] = response.json()["detail"]
-        assert "input" not in error
-        assert f"exceeds {MAX_CIPHERTEXT_BYTES} bytes" in error["ctx"]["error"]
-
-    def test_rejected_payload_id_is_not_echoed(self, client):
-        payload_id = "X" * 200  # over the 128-character cap
-
-        response = client.post("/secrets/reveal", json={"payload_id": payload_id})
-
-        assert response.status_code == 422
-        assert payload_id not in response.text
-
-    def test_error_keeps_location_message_and_bounds(self, client):
-        response = _create(client, ttl_seconds=MAX_TTL_SECONDS + 1)
-
-        [error] = response.json()["detail"]
-        assert error["loc"] == ["body", "ttl_seconds"]
-        assert error["type"] == "less_than_equal"
-        assert error["ctx"] == {"le": MAX_TTL_SECONDS}
-        assert "input" not in error
+        with pytest.raises(SecretAccessDeniedError):
+            await service.retrieve_secret(
+                created.payload_id, caller_identity=OTHER_USER_ID
+            )

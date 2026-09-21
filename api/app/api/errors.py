@@ -1,15 +1,15 @@
 """HTTP mapping for the secret domain exceptions and request validation errors."""
 
+from app.services.exceptions import (
+    InvalidSecretTTLError,
+    SecretAccessDeniedError,
+    SecretNotFoundError,
+    SecretStoreUnavailableError,
+)
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from starlette.responses import JSONResponse
-
-from app.services.exceptions import (
-    InvalidSecretTTLError,
-    SecretNotFoundError,
-    SecretStoreUnavailableError,
-)
 
 # One body for every miss (unknown, burned, expired), so the response carries no
 # enumeration oracle (invariant 5).
@@ -44,6 +44,15 @@ async def _store_unavailable(
     )
 
 
+async def _secret_access_denied(
+    request: Request, exc: SecretAccessDeniedError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": "You are not the intended recipient of this secret."},
+    )
+
+
 # Keys FastAPI's default 422 body carries per error. "input" is left out: it
 # echoes the rejected value back, which for POST /secrets is up to 64 KB of the
 # caller's ciphertext — and for a bad reveal, a payload id.
@@ -68,5 +77,6 @@ async def _request_validation(
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, _request_validation)
     app.add_exception_handler(SecretNotFoundError, _secret_not_found)
+    app.add_exception_handler(SecretAccessDeniedError, _secret_access_denied)
     app.add_exception_handler(InvalidSecretTTLError, _invalid_ttl)
     app.add_exception_handler(SecretStoreUnavailableError, _store_unavailable)
