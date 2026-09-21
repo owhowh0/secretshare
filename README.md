@@ -1,32 +1,94 @@
 # SecretShare
 
-SecretShare is a secure, ephemeral secret-sharing application featuring one-time retrieval, zero-trust end-to-end token validation via Keycloak (OAuth2 / OIDC with PKCE), FastAPI backend, Redis for ephemeral storage, PostgreSQL for persistent realms, and Traefik for unified path-based ingress routing.
+SecretShare is a secure, ephemeral secret-sharing platform featuring **client-side end-to-end hybrid encryption** (Web Crypto API: ECDH P-256 + AES-GCM-256), zero-trust authentication via **Keycloak** (OAuth2 / OIDC with PKCE), **Next.js** frontend with NextAuth, **FastAPI** backend, ephemeral storage with **Redis**, audit logging in **PostgreSQL**, internal **TLS encryption** across datastores, and unified edge routing with **Traefik**.
 
 ---
 
 ## Table of Contents
-- [Architecture & Path-Based Routing](#architecture--path-based-routing)
+- [Key Features](#key-features)
+- [Architecture & Ingress Routing](#architecture--ingress-routing)
+- [Quick Start (One-Command Deployment)](#quick-start-one-command-deployment)
 - [Testing Credentials](#testing-credentials)
 - [Environment Variables](#environment-variables)
-- [Local Development Setup](#local-development-setup)
+- [End-to-End Hybrid Encryption](#end-to-end-hybrid-encryption)
 - [Running Automated Tests](#running-automated-tests)
-- [CI/CD & Ephemeral Previews](#cicd--ephemeral-previews)
+- [CI/CD & Deployment Workflows](#cicd--deployment-workflows)
 
 ---
 
-## Architecture & Path-Based Routing
+## Key Features
 
-The stack avoids fragile subdomains by routing all components cleanly via path prefixes through **Traefik**:
+- **Zero-Knowledge Architecture**: Secrets are encrypted in the browser before transmission using the Web Crypto API. The server only stores opaque ciphertext.
+- **One-Time Burn & Ephemeral TTL**: Secrets are automatically deleted upon first retrieval (burn-on-read) or when their configurable TTL expires.
+- **Client-Side Hybrid Encryption**: Recipients publish ECDH P-256 device public keys. Senders encrypt a random AES-GCM-256 key with the recipient's public key; only the recipient's private key can decrypt the secret.
+- **Internal Datastore TLS**: Both PostgreSQL and Redis communicate over TLS using certificates provisioned at boot by an automated `tls-init` service.
+- **OIDC / OAuth2 with PKCE**: Integrated Keycloak realm pre-provisioned for browser and API authentication.
+- **Edge Path-Based Routing**: Traefik handles all ingress routing on a single port without complex host subdomain configurations.
+
+---
+
+## Architecture & Ingress Routing
+
+All incoming traffic enters via **Traefik**, which routes requests cleanly by path prefix:
 
 | Component | Local URL | PR Preview URL (Ephemeral) | Description |
 | :--- | :--- | :--- | :--- |
-| **Web Frontend** | `http://localhost/` | `http://staging-server/pr-<N>/` | Static frontend served via `nginx:alpine` (auto-redirects from `/pr-<N>`) |
-| **API & Swagger Docs** | `http://localhost/api/docs` | `http://staging-server/pr-<N>/api/docs` | FastAPI backend with OpenAPI 3.0 documentation |
-| **API Healthcheck** | `http://localhost/api/health` | `http://staging-server/pr-<N>/api/health` | Service health status check |
-| **Keycloak Realm** | `http://localhost/keycloak` | `http://staging-server/pr-<N>/keycloak` | Identity & Access Management (OIDC / OAuth2) |
-| **Traefik Dashboard** | `http://localhost:8080/` | `http://staging-server:8080/` | Ingress and router observability |
+| **Web Frontend** | `http://localhost/` | `https://pr-<N>.<domain>/` | Next.js (React) application with NextAuth |
+| **API & Swagger Docs** | `http://localhost/api/docs` | `https://pr-<N>.<domain>/api/docs` | FastAPI backend with OpenAPI 3.0 documentation |
+| **API Healthcheck** | `http://localhost/api/health` | `https://pr-<N>.<domain>/api/health` | Service health status check |
+| **Keycloak Realm** | `http://localhost/keycloak` | `https://pr-<N>.<domain>/keycloak` | Identity & Access Management (OIDC / OAuth2) |
+| **Traefik Dashboard** | `http://localhost:8080/` | *Internal only* | Ingress and router observability |
 
-> **Note on Nginx**: Nginx (`web`) currently acts solely as the lightweight static file server for `./web/index.html` and `./web/app.js`. Traefik is the reverse proxy and edge router. When migrating to **Next.js** later, Next.js will serve its own assets and the Nginx container will be removed without impacting backend routing.
+### Internal Datastore Topology
+```
+                     ┌──────────────────────────────────────────────┐
+                     │          Docker Network: traefik-net         │
+                     │                                              │
+  Public Traffic ──► │  Traefik (:80) ──┬──► Next.js Web (:3000)    │
+                     │                  ├──► Keycloak (:8080)       │
+                     │                  └──► FastAPI (:8000)        │
+                     └──────────────────────────────┬───────────────┘
+                                                    │
+                     ┌──────────────────────────────▼───────────────┐
+                     │          Docker Network: default             │
+                     │                                              │
+                     │  FastAPI (:8000)                             │
+                     │    ├── (TLS via CA) ──► PostgreSQL (:5432)   │
+                     │    └── (TLS via CA) ──► Redis (:6379)        │
+                     │                                              │
+                     │  tls-init: Provisions self-signed CA & certs │
+                     └──────────────────────────────────────────────┘
+```
+
+---
+
+## Quick Start (One-Command Deployment)
+
+The default `docker-compose.yml` is configured as a turnkey, self-contained example stack. Anyone can clone the repository and launch the full application immediately without manual setup:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/owhowh0/secretshare.git
+cd secretshare
+
+# 2. Deploy the full stack
+docker compose up -d --build
+```
+
+That's it! Docker Compose will automatically:
+- Create required networks and volumes.
+- Generate local TLS certificates for datastores via `tls-init`.
+- Bootstrap the PostgreSQL database and Keycloak schema.
+- Import the Keycloak realm and test accounts.
+- Build and start the Next.js frontend and FastAPI backend.
+
+### Optional Customization
+To customize passwords, ports, or secrets, copy `.env.example` to `.env` before running Compose:
+```bash
+cp .env.example .env
+# Edit .env with your desired settings
+docker compose up -d --build
+```
 
 ---
 
@@ -40,127 +102,108 @@ The system includes pre-provisioned testing accounts imported automatically on s
 - **Email**: `test@example.com`
 - **Realm**: `secretshare`
 - **Client ID**: `secretshare-api`
-- **Flow**: Authorization Code Flow with PKCE (SHA-256 with pure JS fallback for non-secure HTTP contexts)
+- **Flow**: Authorization Code Flow with PKCE
 
 ### Keycloak Administrator Account
 - **Username**: `admin`
-- **Password**: Configured via `KEYCLOAK_ADMIN_PASSWORD` in `.env` (generated per PR preview on staging)
-- **Console URL**: `http://localhost/keycloak` (local) or `http://staging-server/pr-<N>/keycloak` (preview)
+- **Password**: `admin` (or configured via `KEYCLOAK_ADMIN_PASSWORD` in `.env`)
+- **Console URL**: `http://localhost/keycloak`
 
 ### Database (PostgreSQL)
-- **User**: `secretshare` (or `${POSTGRES_USER}`)
-- **Password**: Configured via `POSTGRES_PASSWORD` in `.env`
+- **User**: `secretshare`
+- **Password**: `secretshare` (or configured via `POSTGRES_PASSWORD` in `.env`)
 - **Databases**:
-  - Main App DB: `secretshare` (local) / `secretshare_pr_<PR_NUMBER>` (preview)
-  - Keycloak DB: `keycloak` (local) / `keycloak_pr_<PR_NUMBER>` (preview)
+  - Main App DB: `secretshare`
+  - Keycloak DB: `keycloak`
 
 ---
 
 ## Environment Variables
 
-All configuration is managed through environment variables. Copy `.env.example` to `.env` before starting.
-
-| Variable | Required | Default | Scope | Description |
-| :--- | :---: | :--- | :--- | :--- |
-| `POSTGRES_USER` | No | `secretshare` | Shared | PostgreSQL username for application and Keycloak |
-| `POSTGRES_PASSWORD` | **Yes** | — | Shared | Strong password for PostgreSQL authentication |
-| `POSTGRES_DB` | No | `secretshare` | App | PostgreSQL database name for application data |
-| `POSTGRES_PORT` | No | `5432` | DB | Local host port binding for PostgreSQL |
-| `DB_HOST` | No | `db` | App / KC | Hostname of the database service container |
-| `DATABASE_URL` | No | *(constructed)* | App | SQLAlchemy asyncpg connection string |
-| `REDIS_HOST` | No | `redis` | App | Hostname of Redis service container |
-| `REDIS_PORT` | No | `6379` | App | Port of Redis service container |
-| `REDIS_URL` | No | `redis://redis:6379/0` | App | Full Redis connection URI for secret storage |
-| `KEYCLOAK_ADMIN` | No | `admin` | Keycloak | Keycloak root administrator username |
-| `KEYCLOAK_ADMIN_PASSWORD`| **Yes** | — | Keycloak | Password for Keycloak root administrator |
-| `KEYCLOAK_DB` | No | `keycloak` | Keycloak | Dedicated database for Keycloak inside Postgres |
-| `KEYCLOAK_REALM` | No | `secretshare` | Shared | Active Keycloak realm name |
-| `KEYCLOAK_CLIENT_ID` | No | `secretshare-api` | Shared | Public OIDC client ID configured for SecretShare |
-| `KEYCLOAK_URL` | No | `http://keycloak:8080/keycloak` | App / Web | Base URL for Keycloak OIDC issuer & JWKS |
-| `KEYCLOAK_PATH` | No | `/keycloak` | Traefik | Path prefix where Keycloak is served |
-| `API_ROOT_PATH` | No | `/api` | FastAPI | OpenAPI and Swagger path prefix (handles subpath routing) |
-| `ENVIRONMENT` | No | `development` | FastAPI | `development` / `testing` / `production`; production fails fast if `DATABASE_URL` or `KEYCLOAK_*` are missing |
-| `SECRET_TTL_SECONDS` | No | `600` | FastAPI | Default lifetime of an unread secret when the client sends no `ttl_seconds` |
-| `SECRET_TTL_MIN_SECONDS` | No | `300` | FastAPI | Smallest `ttl_seconds` a client may request |
-| `SECRET_TTL_MAX_SECONDS` | No | `86400` | FastAPI | Largest `ttl_seconds` a client may request |
-| `MAX_PAYLOAD_BYTES` | No | `65536` | FastAPI | Max ciphertext size accepted by `POST /secrets` |
-| `RATE_LIMIT_WINDOW_SECONDS` | No | `60` | FastAPI | Rate-limit window length |
-| `CREATE_RATE_LIMIT` | No | `10` | FastAPI | `POST /secrets` requests per IP per window |
-| `RETRIEVE_RATE_LIMIT` | No | `30` | FastAPI | `POST /secrets/reveal` requests per IP per window |
-| `PR_NUMBER` | Conditional | — | Preview | Injected in preview environments for isolation (`/pr-<N>`) |
-| `TEST_USER_USERNAME` | No | `testuser` | Tests | Pre-configured test username for integration tests |
-| `TEST_USER_PASSWORD` | No | `testpassword123` | Tests | Pre-configured test password for integration tests |
-| `TEST_USER_EMAIL` | No | `test@example.com`| Tests | Pre-configured test email address |
-| `REQUIRE_KEYCLOAK` | No | `1` | Tests | When `1`, integration tests fail fast if Keycloak is down |
-| `API_BASE_URL` | No | *(empty)* | Tests | Optional live API URL target (e.g. `http://localhost/api`) |
-| `TRAEFIK_WEB_PORT` | No | `80` | Traefik | Host HTTP port mapping for public web ingress |
-| `TRAEFIK_DASHBOARD_PORT` | No | `8080` | Traefik | Host port mapping for Traefik dashboard |
+| Variable | Default | Scope | Description |
+| :--- | :--- | :--- | :--- |
+| `POSTGRES_USER` | `secretshare` | DB / App | PostgreSQL username |
+| `POSTGRES_PASSWORD` | `secretshare` | DB / App | PostgreSQL password |
+| `POSTGRES_DB` | `secretshare` | App | Application database name |
+| `POSTGRES_PORT` | `5432` | DB | Host port binding for PostgreSQL |
+| `DB_HOST` | `db` | App / KC | Hostname of the PostgreSQL service |
+| `REDIS_HOST` | `redis` | App | Hostname of the Redis service |
+| `REDIS_PORT` | `6379` | App | Port of the Redis service |
+| `REDIS_URL` | `rediss://redis:6379/0` | App | Redis connection URI with TLS (`rediss://`) |
+| `TLS_CA_CERT` | `/certs/ca.crt` | App | Path to trusted CA certificate for internal TLS |
+| `KEYCLOAK_ADMIN` | `admin` | Keycloak | Keycloak administrator username |
+| `KEYCLOAK_ADMIN_PASSWORD`| `admin` | Keycloak | Keycloak administrator password |
+| `KEYCLOAK_DB` | `keycloak` | Keycloak | Dedicated Keycloak database name |
+| `KEYCLOAK_REALM` | `secretshare` | Shared | Active Keycloak realm |
+| `KEYCLOAK_CLIENT_ID` | `secretshare-api` | Shared | Public OIDC client ID |
+| `KEYCLOAK_URL` | `http://keycloak:8080/keycloak` | App / Web | Keycloak OIDC issuer URL |
+| `KEYCLOAK_PATH` | `/keycloak` | Traefik | Ingress path prefix for Keycloak |
+| `AUTH_SECRET` | `default_dev_auth_secret_must_be_32_characters` | NextAuth | 32-character secret for NextAuth session encryption |
+| `API_ROOT_PATH` | `/api` | FastAPI | Ingress path prefix for FastAPI |
+| `SECRET_TTL_SECONDS` | `600` | FastAPI | Default unread secret TTL (10 minutes) |
+| `SECRET_TTL_MIN_SECONDS` | `300` | FastAPI | Minimum secret TTL (5 minutes) |
+| `SECRET_TTL_MAX_SECONDS` | `86400` | FastAPI | Maximum secret TTL (24 hours) |
+| `MAX_PAYLOAD_BYTES` | `65536` | FastAPI | Maximum ciphertext size (64 KB) |
+| `TRAEFIK_WEB_PORT` | `80` | Traefik | Host HTTP ingress port |
+| `TRAEFIK_DASHBOARD_PORT`| `8080` | Traefik | Host port for Traefik dashboard |
 
 ---
 
-## Local Development Setup
+## End-to-End Hybrid Encryption
 
-### 1. Initialize Environment
-```bash
-cp .env.example .env
-# Edit .env and supply secure passwords for POSTGRES_PASSWORD and KEYCLOAK_ADMIN_PASSWORD
-```
+SecretShare implements zero-knowledge encryption directly inside the browser using standard Web Crypto primitives:
 
-### 2. Launch Services with Docker Compose
-```bash
-docker compose up -d --build
-```
-
-### 3. Verify Health
-- **Web UI**: Open [http://localhost](http://localhost)
-- **API Swagger**: Open [http://localhost/api/docs](http://localhost/api/docs)
-- **Keycloak Console**: Open [http://localhost/keycloak](http://localhost/keycloak) (login with `admin`)
-- **Login with Test Account**: Click **Login with Keycloak** and enter `testuser` / `testpassword123`
+1. **Device Key Registration**:
+   - Each authenticated user generates an **ECDH P-256** key pair in their browser.
+   - The private key is stored securely in IndexedDB; the public key is registered with the backend at `POST /keys/device`.
+2. **Secret Creation (Sender)**:
+   - Sender fetches the recipient's ECDH public key from `GET /keys/device/{user_id}`.
+   - Sender generates a random **AES-256-GCM** content encryption key (CEK).
+   - The secret payload is encrypted with the CEK.
+   - Sender derives a shared secret via ECDH and encrypts the CEK.
+   - The encrypted payload is posted to `POST /secrets`.
+3. **Secret Retrieval (Recipient)**:
+   - Recipient fetches the encrypted payload using `POST /secrets/reveal`.
+   - The payload is burned immediately from Redis (one-time read).
+   - Recipient decrypts the CEK using their private ECDH key and decrypts the secret in the browser.
 
 ---
 
 ## Running Automated Tests
 
-### Python Unit Tests (Fast, In-Process)
-Validates API endpoints, input schemas, PyJWT token decoding, and frontend static contracts:
+### Python Unit Tests
 ```bash
-# In the api directory:
-python -m pytest -v -m "not integration"
+cd api
+pytest tests/ -v -m "not integration"
 ```
 
-### Frontend & Path-Routing Tests
-Validates DOM elements, Node.js JS syntax (`node -c`), non-secure HTTP PKCE fallback challenge computation, and subpath URL resolution:
+### TLS Certificate & Configuration Tests
 ```bash
-python -m pytest -v api/tests/test_frontend_and_routing.py
+cd api
+pytest tests/test_tls.py -v
 ```
 
 ### Live OAuth Integration Tests
-Validates real token issuance with Keycloak, token exchange, protected `/api/me` claims, and authenticated one-time secret burn:
 ```bash
-# Run against local running containers:
-scripts/test_oauth.sh
+# Requires running Docker stack
+cd api
+python -m pytest -v -m integration tests/test_oauth_integration.py
 ```
 
 ---
 
-## CI/CD & Ephemeral Previews
+## CI/CD & Deployment Workflows
 
-Every pull request triggers:
+GitHub Actions workflows are defined in [`.github/workflows/`](.github/workflows/):
 
-1. **Test API Pipeline** (`.github/workflows/test-api.yml`):
-   - Runs unit tests and frontend asset tests in Python 3.12.
-   - Spins up the Docker compose stack and executes live OAuth integration tests against the live API and Keycloak.
-2. **PR Preview Deployment** (`.github/workflows/deploy-preview.yml`):
-   - Securely deploys an isolated preview stack on the staging server via Tailscale.
-   - Sets up isolated databases (`secretshare_pr_<PR_NUM>`, `keycloak_pr_<PR_NUM>`).
-   - Executes a 9-step automated smoke test battery:
-     1. Trailing-slash redirect verification (`/pr-<N>` &rarr; `/pr-<N>/`).
-     2. Static frontend HTML & DOM elements verification.
-     3. Static JS delivery (`app.js` 200 OK with PKCE logic).
-     4. OpenAPI schema & Swagger verification (`/api/openapi.json`).
-     5. Keycloak OIDC discovery & live token generation (`testuser`).
-     6. Protected `/api/me` verification with Bearer token.
-     7. Negative authentication checks (403 without token, 401 with invalid token).
-     8. Authenticated secret lifecycle (creation, retrieval, and 404 burn).
-     9. Anonymous secret lifecycle (creation, retrieval, and 404 burn).
-   - Automatically posts the live preview URL on the pull request.
+1. **API & Security Tests** ([`test-api.yml`](.github/workflows/test-api.yml)):
+   - Runs on pull requests and pushes to development branches.
+   - Executes unit tests, migration checks, and full OAuth integration tests against Dockerized dependencies.
+2. **TLS Verification** ([`test-tls.yml`](.github/workflows/test-tls.yml)):
+   - Verifies certificate generation script, permissions, and TLS settings.
+3. **Ephemeral PR Previews** ([`deploy-preview.yml`](.github/workflows/deploy-preview.yml)):
+   - Automatically provisions an isolated preview stack per pull request on the staging server via Tailscale.
+   - Provides full HTTPS on a dedicated subdomain (`https://pr-<N>.<domain>/`).
+   - Runs automated end-to-end smoke tests (auth, secret lifecycle, routing).
+4. **Staging Deployment** ([`deploy-staging.yml`](.github/workflows/deploy-staging.yml)):
+   - **Manually executable via `workflow_dispatch` (only on `main`)**: Deploys the latest `main` branch to the permanent staging environment via Tailscale SSH on demand.
