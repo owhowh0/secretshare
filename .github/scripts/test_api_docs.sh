@@ -7,9 +7,9 @@ BASE_URL="${BASE_URL%/}"
 echo "=== Testing API Health, Swagger Docs & OpenAPI Schema at ${BASE_URL}/api ==="
 
 echo "--- Testing /api/health ---"
-HEALTH_RESPONSE=$(curl -s -f -m 5 "${BASE_URL}/api/health" || {
+HEALTH_RESPONSE=$(curl -s -k -f -m 5 "${BASE_URL}/api/health" || {
   echo "Error: /api/health failed"
-  curl -v -m 5 "${BASE_URL}/api/health" || true
+  curl -v -k -m 5 "${BASE_URL}/api/health" || true
   exit 1
 })
 echo "$HEALTH_RESPONSE" | grep -q '"status":"ok"' || {
@@ -19,15 +19,15 @@ echo "$HEALTH_RESPONSE" | grep -q '"status":"ok"' || {
 echo "-> /api/health status is ok"
 
 echo "--- Testing /api/docs ---"
-curl -s -f -m 5 "${BASE_URL}/api/docs" >/dev/null || {
+curl -s -k -f -m 5 "${BASE_URL}/api/docs" >/dev/null || {
   echo "Error: /api/docs failed"
-  curl -v -m 5 "${BASE_URL}/api/docs" || true
+  curl -v -k -m 5 "${BASE_URL}/api/docs" || true
   exit 1
 }
 echo "-> /api/docs responded with 200 OK"
 
 echo "--- Testing /api/openapi.json ---"
-OPENAPI_JSON=$(curl -s -f -m 5 "${BASE_URL}/api/openapi.json" || {
+OPENAPI_JSON=$(curl -s -k -f -m 5 "${BASE_URL}/api/openapi.json" || {
   echo "Error: /api/openapi.json failed to fetch"
   exit 1
 })

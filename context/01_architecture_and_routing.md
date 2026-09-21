@@ -1,22 +1,22 @@
-# Architecture & Path-Based Routing
+# Architecture & Routing
 
-## 1. Why Path-Based Routing (No Subdomains)?
-Initially, the project explored subdomain-based routing (e.g. `app.localhost`, `pr-9.api.staging-server`).
-**Problem**:
-- Subdomains require wildcard DNS or `/etc/hosts` hacks on every developer machine and Tailscale node.
-- On private networks (Tailscale), subdomains like `*.staging-server` do not resolve without MagicDNS or custom split-DNS configurations.
-- Visiting preview environments failed because machines could not resolve the hostnames.
+## 1. Routing Model: Local Dev & Ephemeral PR Subdomains
+The project employs a dual-routing architecture tailored for local development and private ephemeral preview environments:
 
-**Decision**:
-Transition entirely to **pure path-based routing**:
-- Local Development:
+- **Local Development (`docker-compose.yml`)**:
   - Web UI: `http://localhost/` (root)
+  - NextAuth: `http://localhost/api/auth`
   - API & Docs: `http://localhost/api` (Swagger docs at `/api/docs`)
   - Keycloak: `http://localhost/keycloak`
-- Ephemeral PR Preview Environments:
-  - Web UI: `http://staging-server/pr-<PR_NUMBER>/`
-  - API & Docs: `http://staging-server/pr-<PR_NUMBER>/api` (Swagger docs at `/pr-<PR_NUMBER>/api/docs`)
-  - Keycloak: `http://staging-server/pr-<PR_NUMBER>/keycloak`
+- **Ephemeral PR Preview Environments (`docker-compose.preview.yml`)**:
+  - Each PR preview joins Tailscale as a lightweight ephemeral node: `https://pr-<PR_NUMBER>.<tailnet>.ts.net`
+  - **Automatic Let's Encrypt TLS**: Tailscale Serve terminates HTTPS on port 443 with a valid certificate.
+  - **WebAuthn Enabled**: Because the preview runs under trusted HTTPS, browsers treat it as a Secure Context (`window.isSecureContext === true`), allowing WebAuthn passkeys to work without security errors.
+  - **Subdomain-Isolated Routing**:
+    - Web UI: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/` (root application, no `basePath`)
+    - NextAuth: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/api/auth`
+    - API & Docs: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/api`
+    - Keycloak: `https://pr-<PR_NUMBER>.<tailnet>.ts.net/keycloak`
 
 ---
 
@@ -26,11 +26,11 @@ Transition entirely to **pure path-based routing**:
 Traefik evaluates rules by descending `priority`:
 
 | Service | Route Rule | Priority | Middleware | Forward Port |
-| :--- | :--- | :---: | :--- | :---: |
-| **Keycloak** | `PathPrefix(/keycloak)` or `PathPrefix(/pr-<N>/keycloak)` | `200` | None (`KC_HTTP_RELATIVE_PATH` configured in Keycloak) | `8080` |
-| **API (FastAPI)** | `PathPrefix(/api)` or `PathPrefix(/pr-<N>/api)` | `100` | `stripprefix` (strips `/api` or `/pr-<N>/api`) | `8000` |
-| **Web Redirect** | `Path(/pr-<N>)` | `20` | `redirectregex` (redirects to `/pr-<N>/`) | `80` (Web) |
-| **Web (Nginx)** | `PathPrefix(/)` or `PathPrefix(/pr-<N>)` | `10` | `stripprefix` (on preview: strips `/pr-<N>`) | `80` |
+| :--- | :--- | :---: | :--- | :--- |
+| **Keycloak** | `PathPrefix(/keycloak)` | `200` | None (`KC_HTTP_RELATIVE_PATH=/keycloak`) | `8080` |
+| **NextAuth** | `PathPrefix(/api/auth)` | `150` | None (routes auth requests to Next.js) | `3000` |
+| **API (FastAPI)** | `PathPrefix(/api)` | `100` | `stripprefix` (strips `/api`) | `8000` |
+| **Web (Next.js)** | `HostRegexp(...)` or `PathPrefix(/)` | `10` | None | `3000` |
 
 ### Key FastAPI Detail: `root_path`
 Because Traefik strips the path prefix before forwarding requests to FastAPI (`uvicorn`):
