@@ -2,9 +2,13 @@ services:
   # Generates CA + postgres + redis TLS certificates into the tls-certs volume.
   # Runs once per volume lifetime; subsequent starts are no-ops.
   tls-init:
-    image: postgres:16-alpine
-    entrypoint: sh
-    command: /scripts/generate.sh
+    image: alpine:3
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache openssl >/dev/null 2>&1
+        sh /scripts/generate.sh
     volumes:
       - tls-certs:/certs
       - ./tls:/scripts:ro
