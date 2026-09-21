@@ -21,6 +21,8 @@ AUDIT_EVENT_TYPES = ("created", "revealed", "expired", "denied")
 
 PAYLOAD_ID_PREFIX_LENGTH = 8
 
+SUPPORTED_PLATFORMS = "('slack', 'teams', 'keycloak', 'web')"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -39,7 +41,7 @@ class User(Base):
 
     __table_args__ = (
         UniqueConstraint("platform", "platform_user_id", name="uq_users_platform_user"),
-        CheckConstraint("platform IN ('slack', 'teams')", name="ck_users_platform"),
+        CheckConstraint(f"platform IN {SUPPORTED_PLATFORMS}", name="ck_users_platform"),
     )
 
 
@@ -54,6 +56,7 @@ class DeviceKey(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    platform: Mapped[str] = mapped_column(Text, nullable=False, default="web")
     public_key: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -65,7 +68,12 @@ class DeviceKey(Base):
 
     user: Mapped[User] = relationship(back_populates="device_keys")
 
-    __table_args__ = (Index("ix_device_keys_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_device_keys_user_id", "user_id"),
+        CheckConstraint(
+            f"platform IN {SUPPORTED_PLATFORMS}", name="ck_device_keys_platform"
+        ),
+    )
 
 
 class AuditEvent(Base):

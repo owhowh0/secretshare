@@ -18,6 +18,9 @@ class InMemorySecretStore:
         self.payloads[payload_id] = ciphertext
         self.ttls[payload_id] = ttl_seconds
 
+    async def exists(self, payload_id: str) -> bool:
+        return payload_id in self.payloads
+
     async def burn(self, payload_id: str) -> str | None:
         self.ttls.pop(payload_id, None)
         return self.payloads.pop(payload_id, None)

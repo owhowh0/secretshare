@@ -25,10 +25,12 @@ class InvalidSecretTTLError(SecretError):
         self.ttl_seconds = ttl_seconds
         self.min_seconds = min_seconds
         self.max_seconds = max_seconds
-        super().__init__(
-            f"ttl_seconds must be between {min_seconds} and {max_seconds}"
-        )
+        super().__init__(f"ttl_seconds must be between {min_seconds} and {max_seconds}")
 
 
 class SecretStoreUnavailableError(SecretError):
     """The backing store could not be reached; the request may be retried."""
+
+
+class SecretAccessDeniedError(SecretError):
+    """The caller is not the intended recipient of this secret."""

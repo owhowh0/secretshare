@@ -1,15 +1,17 @@
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from redis.exceptions import RedisError
-
 from app.core.ids import new_payload_id
+from app.schemas.secrets import EncryptedKeyItem
 from app.services.exceptions import (
     InvalidSecretTTLError,
+    SecretAccessDeniedError,
     SecretNotFoundError,
     SecretStoreUnavailableError,
 )
 from app.storage.redis_store import SecretStore
+from redis.exceptions import RedisError
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,14 @@ class CreatedSecret:
     payload_id: str
     ttl_seconds: int
     expires_at: datetime
+
+
+@dataclass(frozen=True)
+class SecretEnvelope:
+    recipient_id: str
+    encrypted_keys: list[EncryptedKeyItem]
+    iv: str
+    ciphertext: str
 
 
 class SecretService:
@@ -33,19 +43,39 @@ class SecretService:
         self._min_ttl = min_ttl_seconds
         self._max_ttl = max_ttl_seconds
 
+    async def check_exists(self, payload_id: str) -> bool:
+        try:
+            return await self._store.exists(payload_id)
+        except RedisError as exc:
+            raise SecretStoreUnavailableError() from exc
+
     async def create_secret(
-        self, ciphertext: str, ttl_seconds: int | None = None
+        self,
+        recipient_id: str,
+        encrypted_keys: list[EncryptedKeyItem],
+        iv: str,
+        ciphertext: str,
+        ttl_seconds: int | None = None,
     ) -> CreatedSecret:
         ttl = self._default_ttl if ttl_seconds is None else ttl_seconds
-        # The request schema checks the same bounds, but the service is the
-        # authority: any caller that skips the schema still cannot store a
-        # secret that outlives the configured maximum.
         if not self._min_ttl <= ttl <= self._max_ttl:
             raise InvalidSecretTTLError(ttl, self._min_ttl, self._max_ttl)
 
         payload_id = new_payload_id()
+        envelope_data = {
+            "recipient_id": recipient_id,
+            "encrypted_keys": [
+                k.model_dump(mode="json") if hasattr(k, "model_dump") else k
+                for k in encrypted_keys
+            ],
+            "iv": iv,
+            "ciphertext": ciphertext,
+        }
+
         try:
-            await self._store.put(payload_id, ciphertext, ttl_seconds=ttl)
+            await self._store.put(
+                payload_id, json.dumps(envelope_data), ttl_seconds=ttl
+            )
         except RedisError as exc:
             raise SecretStoreUnavailableError() from exc
 
@@ -55,12 +85,26 @@ class SecretService:
             expires_at=datetime.now(timezone.utc) + timedelta(seconds=ttl),
         )
 
-    async def retrieve_secret(self, payload_id: str) -> str:
+    async def retrieve_secret(
+        self, payload_id: str, caller_identity: str
+    ) -> SecretEnvelope:
         try:
-            ciphertext = await self._store.burn(payload_id)
+            raw_payload = await self._store.burn(payload_id)
         except RedisError as exc:
             raise SecretStoreUnavailableError() from exc
 
-        if ciphertext is None:
+        if raw_payload is None:
             raise SecretNotFoundError()
-        return ciphertext
+
+        data = json.loads(raw_payload)
+        if data.get("recipient_id") != caller_identity:
+            raise SecretAccessDeniedError()
+
+        return SecretEnvelope(
+            recipient_id=data["recipient_id"],
+            encrypted_keys=[
+                EncryptedKeyItem(**item) for item in data["encrypted_keys"]
+            ],
+            iv=data["iv"],
+            ciphertext=data["ciphertext"],
+        )

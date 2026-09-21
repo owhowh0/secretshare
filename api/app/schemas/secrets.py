@@ -1,8 +1,8 @@
 from datetime import datetime
-
-from pydantic import BaseModel, Field, field_validator
+from uuid import UUID
 
 from app.core.config import get_settings
+from pydantic import BaseModel, Field, field_validator
 
 # Resolved at import time so the limits appear in the OpenAPI schema. The
 # server stays blind to the envelope's structure (invariant 1) — only the
@@ -14,7 +14,27 @@ MIN_TTL_SECONDS = _settings.secret_ttl_min_seconds
 MAX_TTL_SECONDS = _settings.secret_ttl_max_seconds
 
 
+class EncryptedKeyItem(BaseModel):
+    device_id: UUID
+    platform: str
+    encrypted_aes_key: str = Field(
+        description="Base64 encoded RSA-OAEP encrypted AES key."
+    )
+
+
 class SecretCreateRequest(BaseModel):
+    recipient_id: str = Field(
+        min_length=1, max_length=255, description="Platform user ID of the recipient."
+    )
+    encrypted_keys: list[EncryptedKeyItem] = Field(
+        min_length=1, description="AES key encrypted for each active recipient device."
+    )
+    iv: str = Field(
+        min_length=1,
+        max_length=64,
+        description="Base64 encoded 12-byte initialization vector.",
+    )
+
     ciphertext: str = Field(
         min_length=1,
         max_length=MAX_CIPHERTEXT_BYTES,
@@ -52,5 +72,12 @@ class SecretRevealRequest(BaseModel):
     payload_id: str = Field(min_length=1, max_length=128)
 
 
+class SecretExistsResponse(BaseModel):
+    exists: bool
+
+
 class SecretRetrieveResponse(BaseModel):
+    recipient_id: str
+    encrypted_keys: list[EncryptedKeyItem]
+    iv: str
     ciphertext: str
