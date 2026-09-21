@@ -2,11 +2,6 @@ name: Deploy Staging
 
 on:
   workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to deploy"
-        required: false
-        default: "main"
 
 concurrency:
   group: deploy-staging
@@ -16,6 +11,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging Server
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Connect to Tailscale
@@ -37,12 +33,13 @@ jobs:
               git clone "https://github.com/${{ github.repository }}.git" "${REPO_DIR}"
             fi
 
-            echo "=== Pulling latest changes on branch ==="
+            echo "=== Syncing repository to origin/main ==="
             cd "${REPO_DIR}"
             git remote set-url origin "https://github.com/${{ github.repository }}.git"
-            git fetch origin
-            git checkout "${{ inputs.branch || 'main' }}"
-            git pull origin "${{ inputs.branch || 'main' }}"
+            git fetch origin main
+            git checkout -B main origin/main
+            git reset --hard origin/main
+            git clean -fd
 
             echo "=== Ensuring shared traefik network ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net

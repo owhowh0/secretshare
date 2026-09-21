@@ -206,5 +206,4 @@ GitHub Actions workflows are defined in [`.github/workflows/`](.github/workflows
    - Provides full HTTPS on a dedicated subdomain (`https://pr-<N>.<domain>/`).
    - Runs automated end-to-end smoke tests (auth, secret lifecycle, routing).
 4. **Staging Deployment** ([`deploy-staging.yml`](.github/workflows/deploy-staging.yml)):
-   - **Manually executable via `workflow_dispatch`** to avoid unwanted deployments on every push.
-   - Deploys the latest code to the permanent staging environment via Tailscale SSH on demand.
+   - **Manually executable via `workflow_dispatch` (only on `main`)**: Deploys the latest `main` branch to the permanent staging environment via Tailscale SSH on demand.
