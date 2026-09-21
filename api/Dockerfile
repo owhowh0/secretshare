@@ -65,8 +65,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Apply pending migrations, then launch FastAPI via uvicorn with proxy headers
-# enabled (for reverse proxies like Traefik/Caddy). A failed migration stops the
-# container instead of serving with a missing schema. exec makes uvicorn PID 1
-# so it receives SIGTERM directly.
-CMD ["sh", "-c", "python -m app.db.migrate && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]
+# Apply pending migrations, then launch FastAPI via uvicorn. A failed migration
+# stops the container instead of serving with a missing schema. exec makes
+# uvicorn PID 1 so it receives SIGTERM directly. Forwarded headers are handled
+# in the app (TrustedProxyMiddleware, TRUSTED_PROXIES): uvicorn's own
+# --proxy-headers only trusts 127.0.0.1, never Traefik in another container.
+CMD ["sh", "-c", "python -m app.db.migrate && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-proxy-headers"]

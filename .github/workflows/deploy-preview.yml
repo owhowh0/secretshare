@@ -63,7 +63,21 @@ jobs:
 
             echo "=== Ensuring base traefik router exists ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
+            # Previews reach Traefik through each PR's tailscale sidecar, so
+            # Traefik must keep the X-Forwarded-For the sidecar sets (the
+            # tailnet client IP) instead of replacing it with the sidecar's
+            # own address. Only private Docker ranges are trusted; tailnet
+            # clients hitting :80 directly (100.64.0.0/10) are not. A router
+            # started without this flag is recreated once (a brief blip for
+            # every running preview).
+            TRAEFIK_TRUSTED_IPS="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+            if [ -n "$(docker ps -aq -f name=^traefik$)" ] && \
+               ! docker inspect traefik --format '{{join .Args " "}}' | grep -q "forwardedHeaders.trustedIPs=${TRAEFIK_TRUSTED_IPS}"; then
+              echo "-> Recreating traefik with forwardedHeaders.trustedIPs"
+              docker rm -f traefik
+            fi
             if [ -z "$(docker ps -q -f name=^traefik$)" ]; then
+              docker rm -f traefik >/dev/null 2>&1 || true
               docker run -d \
                 --name traefik \
                 --restart unless-stopped \
@@ -76,7 +90,8 @@ jobs:
                 --providers.docker=true \
                 --providers.docker.exposedbydefault=false \
                 --providers.docker.network=traefik-net \
-                --entrypoints.web.address=:80
+                --entrypoints.web.address=:80 \
+                --entrypoints.web.forwardedHeaders.trustedIPs="${TRAEFIK_TRUSTED_IPS}"
             fi
 
             if [ ! -d "${REPO_DIR}/.git" ]; then

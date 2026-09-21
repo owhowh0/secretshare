@@ -244,6 +244,17 @@ A likely fix: deploy staging through `docker-compose.preview.yml`-style routing 
 
 ---
 
-## 14. Rate Limits Shared by All Users Behind Traefik (open)
+## 14. Rate Limits Shared by All Users Behind Traefik (fixed in PR #29)
 
-uvicorn runs with `--proxy-headers` but no `--forwarded-allow-ips`, so it only trusts `127.0.0.1`. Behind Traefik, `request.client.host` is Traefik's container IP, and `rl:<scope>:<ip>` becomes one bucket for everyone: 10 creates per minute **in total** per stack. The smoke tests can hit 429 if run repeatedly. The fix is to pass `--forwarded-allow-ips` set to the Traefik network (or `*` if the API is only reachable through Traefik).
+### Symptom:
+All users of a stack shared 10 creates per minute; repeated smoke runs hit 429. The audit `ip` column always held Traefik's container address.
+
+### Root Cause:
+- uvicorn ran with `--proxy-headers` but no `--forwarded-allow-ips`, so it trusted only `127.0.0.1` and used the TCP peer (Traefik, `172.18.0.3`) as the client.
+- In previews, the global Traefik didn't trust forwarded headers from the tailscale sidecar, so it replaced the client IP with the sidecar's.
+
+### Solution:
+`TrustedProxyMiddleware` with `TRUSTED_PROXIES` on the API; `--no-proxy-headers` for uvicorn; `forwardedHeaders.trustedIPs` on the preview Traefik. See `01_architecture_and_routing.md` §5.
+
+### Pitfall:
+Never trust `*` or read the **leftmost** `X-Forwarded-For` entry: the client writes that one, and trusting it lets anyone pick a fresh address for every request.

@@ -69,8 +69,25 @@ All runtime configuration goes through `app.core.config.Settings` (pydantic-sett
 | `ENVIRONMENT` | `development` | `production` fails fast without `DATABASE_URL` / `KEYCLOAK_*` |
 | `SECRET_TTL_SECONDS` / `_MIN_` / `_MAX_` | 600 / 300 / 86400 | Validated `min ≤ default ≤ max` |
 | `MAX_PAYLOAD_BYTES` | 65536 | UTF-8 bytes; the body middleware allows +1 KB of JSON overhead |
-| `CREATE_RATE_LIMIT` / `RETRIEVE_RATE_LIMIT` / `RATE_LIMIT_WINDOW_SECONDS` | 10 / 30 / 60 | Keyed by `request.client.host` in Redis. **Caveat:** uvicorn runs with `--proxy-headers` but no `--forwarded-allow-ips`, so it only trusts `127.0.0.1`. Behind Traefik the "client" is Traefik's container IP, so all users share one bucket (see roadmap known issues). |
+| `CREATE_RATE_LIMIT` / `RETRIEVE_RATE_LIMIT` / `RATE_LIMIT_WINDOW_SECONDS` | 10 / 30 / 60 | Keyed by the real client IP (`rl:<scope>:<ip>` in Redis), resolved by `TrustedProxyMiddleware`. |
+| `TRUSTED_PROXIES` | `127.0.0.1/32,::1/128` | Proxies whose `X-Forwarded-For`/`-Proto` are believed. Both compose files set the private ranges `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`. See §5. |
 | `TLS_CA_CERT` | unset | Enables TLS verification for Redis and Postgres |
 | `AUDIT_ENABLED` | true | |
 
 The request schemas read the TTL and size bounds **at import time** (so they appear in OpenAPI). The service layer re-checks TTL bounds against the live settings.
+
+---
+
+## 5. Client IP Resolution Behind Proxies (PR #29)
+
+The API's TCP peer is always Traefik, and in previews Traefik's peer is the tailscale sidecar. The real client address is carried in `X-Forwarded-For`:
+
+```
+browser (100.x tailnet) → tailscale serve (sets XFF=100.x) → Traefik (appends sidecar 172.18.x) → API
+```
+
+- **API:** `app.core.proxy.TrustedProxyMiddleware` (outermost middleware). If the TCP peer is in `TRUSTED_PROXIES`, it walks `X-Forwarded-For` right to left and takes the first hop that isn't a trusted proxy. Client-written entries further left are ignored, so forging the header can't reset a rate-limit bucket. A malformed chain leaves the peer unchanged. `X-Forwarded-Proto` is applied the same way.
+- **uvicorn** runs with `--no-proxy-headers`. Its own handling trusts only `127.0.0.1` and would never match Traefik.
+- **Preview Traefik** (the global container started by `deploy-preview.yml`) runs with `--entrypoints.web.forwardedHeaders.trustedIPs=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, so it keeps the sidecar's `X-Forwarded-For` instead of overwriting it with the sidecar's IP. The deploy recreates an older router that lacks the flag.
+- Before this fix every caller mapped to Traefik's IP: one shared bucket of 10 creates per minute per stack, and a useless IP in audit rows.
+- Tested in `api/tests/test_proxy.py` (spoofing, per-client buckets, audit IP, deployment wiring).

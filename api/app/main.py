@@ -9,6 +9,7 @@ from app.core.auth import get_current_user
 from app.core.config import get_settings
 from app.core.headers import SecurityHeadersMiddleware
 from app.core.limits import BODY_OVERHEAD_BYTES, BodySizeLimitMiddleware
+from app.core.proxy import TrustedProxyMiddleware
 from app.core.logging_filters import install_secret_path_redaction
 from app.db.session import create_engine, create_session_factory, dispose_engine
 from fastapi import Depends, FastAPI, Request, status
@@ -86,6 +87,9 @@ app.add_middleware(
     BodySizeLimitMiddleware,
     max_body_bytes=settings.max_payload_bytes + BODY_OVERHEAD_BYTES,
 )
+# Outermost of all: every layer (rate limiter, audit, CORS) must see the real
+# client address, not the proxy's.
+app.add_middleware(TrustedProxyMiddleware, trusted_proxies=settings.trusted_proxies)
 
 # Include routers
 app.include_router(secrets_router)

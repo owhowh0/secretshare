@@ -23,10 +23,9 @@ Stack: Next.js 15 + NextAuth v5 · FastAPI · Redis 7 (TLS) · PostgreSQL 16 (TL
 ## Current Status (2026-09-21)
 
 - `main` is green: `Test API` and `Test TLS` pass. Every PR gets a live preview at `https://pr-<N>.tail070378.ts.net`, and its smoke battery now really runs (it silently didn't before #26).
-- Recent: #26 fixed "a denied reveal burns the secret"; #27 moved `exists` out of the URL.
+- Recent: #26 fixed "a denied reveal burns the secret"; #27 moved `exists` out of the URL; #29 made rate limits per real client behind the proxies.
 - **Open problems:**
   - staging deploy broken (troubleshooting §13)
-  - rate limits shared by everyone behind Traefik (§14)
   - decrypt-after-burn loss on unregistered devices (roadmap §3)
 
 ## Keep this folder current
