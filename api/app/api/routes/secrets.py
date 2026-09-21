@@ -5,6 +5,7 @@ from app.core.rate_limit import RateLimiter
 from app.schemas.secrets import (
     SecretCreateRequest,
     SecretCreateResponse,
+    SecretExistsRequest,
     SecretExistsResponse,
     SecretRetrieveResponse,
     SecretRevealRequest,
@@ -87,16 +88,18 @@ async def create_secret(
     )
 
 
-@router.get(
-    "/{payload_id}/exists",
+# Non-destructive check, e.g. before the reveal confirmation or for link
+# previews. Like /reveal, the id travels in the body, never the path (AUD-6).
+@router.post(
+    "/exists",
     response_model=SecretExistsResponse,
     dependencies=[Depends(retrieve_rate_limit)],
 )
 async def check_secret_exists(
-    payload_id: str,
+    payload: SecretExistsRequest,
     service: SecretService = Depends(get_secret_service),
 ) -> SecretExistsResponse:
-    exists = await service.check_exists(payload_id)
+    exists = await service.check_exists(payload.payload_id)
     return SecretExistsResponse(exists=exists)
 
 

@@ -142,13 +142,28 @@ def test_create_secret(client: TestClient) -> None:
 def test_check_secret_exists(client: TestClient) -> None:
     payload_id = _create(client).json()["payload_id"]
 
-    res_exists = client.get(f"/secrets/{payload_id}/exists")
+    res_exists = client.post("/secrets/exists", json={"payload_id": payload_id})
     assert res_exists.status_code == 200
     assert res_exists.json() == {"exists": True}
 
-    res_missing = client.get("/secrets/unknown-id/exists")
+    res_missing = client.post("/secrets/exists", json={"payload_id": "unknown-id"})
     assert res_missing.status_code == 200
     assert res_missing.json() == {"exists": False}
+
+
+def test_check_exists_does_not_consume_the_secret(client: TestClient, store) -> None:
+    payload_id = _create(client).json()["payload_id"]
+
+    for _ in range(3):
+        client.post("/secrets/exists", json={"payload_id": payload_id})
+
+    assert payload_id in store.payloads
+    assert client.post("/secrets/reveal", json={"payload_id": payload_id}).status_code == 200
+
+
+@pytest.mark.parametrize("body", [{}, {"payload_id": ""}, {"payload_id": "X" * 129}])
+def test_check_exists_validates_payload_id(client: TestClient, body) -> None:
+    assert client.post("/secrets/exists", json=body).status_code == 422
 
 
 def test_retrieve_secret_burns_envelope(client: TestClient) -> None:
@@ -205,7 +220,9 @@ class TestDeniedRevealKeepsSecret:
             assert payload_id in store.payloads, "a denied reveal burned the secret"
 
             recipient = self._as(store, audit, RECIPIENT_ID)
-            assert recipient.get(f"/secrets/{payload_id}/exists").json() == {"exists": True}
+            assert recipient.post(
+                "/secrets/exists", json={"payload_id": payload_id}
+            ).json() == {"exists": True}
             revealed = recipient.post("/secrets/reveal", json={"payload_id": payload_id})
         finally:
             app.dependency_overrides.clear()

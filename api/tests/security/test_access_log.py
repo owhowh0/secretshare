@@ -93,6 +93,29 @@ class TestIdNeverReachesTheRequestLine:
         )
 
 
+    def test_exists_keeps_the_id_out_of_the_url(self, client) -> None:
+        payload_id = client.post(
+            "/secrets", json=secret_body(CIPHERTEXT)
+        ).json()["payload_id"]
+
+        checked = client.post("/secrets/exists", json={"payload_id": payload_id})
+
+        assert checked.status_code == 200
+        assert checked.json() == {"exists": True}
+        assert payload_id not in str(checked.request.url)
+        # The old id-in-path form is gone.
+        assert client.get(f"/secrets/{payload_id}/exists").status_code in (404, 405)
+
+    def test_no_route_takes_a_payload_id_in_the_path(self) -> None:
+        # Guards every current and future route, not just the ones above.
+        offenders = [
+            route.path
+            for route in app.routes
+            if "{" in getattr(route, "path", "") and "secret" in route.path
+        ]
+        assert offenders == []
+
+
 class TestAccessLogRedaction:
     """Simulates what uvicorn.access emits: the path arrives as a format arg."""
 
