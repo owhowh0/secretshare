@@ -15,6 +15,16 @@ services:
     networks:
       - traefik-net
 
+  # Generates CA + postgres + redis TLS certificates into the tls-certs volume.
+  # Runs once per volume lifetime; subsequent starts are no-ops.
+  tls-init:
+    image: postgres:16-alpine
+    entrypoint: sh
+    command: /scripts/generate.sh
+    volumes:
+      - tls-certs:/certs
+      - ./tls:/scripts:ro
+
   web:
     build:
       context: ./web
@@ -65,7 +75,8 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-secretshare}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare}
-      - REDIS_URL=${REDIS_URL:-redis://${REDIS_HOST:-redis}:6379/0}
+      - REDIS_URL=${REDIS_URL:-rediss://${REDIS_HOST:-redis}:6379/0}
+      - TLS_CA_CERT=/certs/ca.crt
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080${KEYCLOAK_PATH:-/keycloak}}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
@@ -75,6 +86,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      tls-init:
+        condition: service_completed_successfully
+    volumes:
+      - tls-certs:/certs:ro
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
@@ -89,6 +104,18 @@ services:
 
   db:
     image: postgres:16-alpine
+    # Custom entrypoint: copies the root-owned key to /tmp with postgres
+    # ownership so PostgreSQL can read it, then starts the original entrypoint.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        install -m 600 -o postgres /certs/postgres.key /tmp/postgres.key
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/certs/postgres.crt \
+          -c ssl_key_file=/tmp/postgres.key \
+          -c ssl_ca_file=/certs/ca.crt
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-secretshare}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -99,8 +126,12 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d:ro
+      - tls-certs:/certs:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-secretshare} -d ${POSTGRES_DB:-secretshare}"]
+      test: ["CMD-SHELL", "PGSSLMODE=require pg_isready -U ${POSTGRES_USER:-secretshare} -d ${POSTGRES_DB:-secretshare}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -109,11 +140,28 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --save "" --appendonly no
+    # Custom entrypoint: copies the root-owned key to /tmp with redis ownership,
+    # then starts redis-server with TLS on port 6379 and the plain port disabled.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        install -m 600 -o redis /certs/redis.key /tmp/redis.key
+        exec redis-server \
+          --tls-port 6379 --port 0 \
+          --tls-cert-file /certs/redis.crt \
+          --tls-key-file /tmp/redis.key \
+          --tls-ca-cert-file /certs/ca.crt \
+          --save "" --appendonly no
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - tls-certs:/certs:ro
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/certs/ca.crt", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -128,9 +176,12 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-secretshare}
       KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGSSLMODE: require
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - tls-certs:/certs:ro
     command:
       - /bin/sh
       - -c
@@ -156,7 +207,7 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak}
+      KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak}?ssl=true&sslmode=require
       KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
       KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
@@ -186,6 +237,7 @@ services:
 volumes:
   pgdata:
   keycloak-data:
+  tls-certs:
 
 networks:
   traefik-net:
