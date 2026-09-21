@@ -1,4 +1,5 @@
 import asyncio
+import ssl
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -69,11 +70,18 @@ async def run_async_migrations() -> None:
     and associate a connection with the context.
 
     """
+    settings = get_settings()
+    connect_args = {}
+    if settings.tls_ca_cert:
+        ctx = ssl.create_default_context(cafile=settings.tls_ca_cert)
+        ctx.check_hostname = False
+        connect_args["ssl"] = ctx
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:

@@ -1,3 +1,4 @@
+import ssl
 from collections.abc import AsyncIterator
 
 from fastapi import HTTPException, Request, status
@@ -9,8 +10,13 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
-def create_engine(database_url: str) -> AsyncEngine:
-    return create_async_engine(database_url, pool_pre_ping=True)
+def create_engine(database_url: str, *, tls_ca_cert: str = "") -> AsyncEngine:
+    connect_args: dict = {}
+    if tls_ca_cert:
+        ctx = ssl.create_default_context(cafile=tls_ca_cert)
+        ctx.check_hostname = False  # internal Docker; CN=db, not the hostname
+        connect_args["ssl"] = ctx
+    return create_async_engine(database_url, pool_pre_ping=True, connect_args=connect_args)
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

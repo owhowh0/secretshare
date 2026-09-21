@@ -1,4 +1,5 @@
 import logging
+import ssl
 from contextlib import asynccontextmanager
 
 from app.api.errors import register_exception_handlers
@@ -31,10 +32,19 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
 
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    redis_kwargs: dict = {"decode_responses": True}
+    if settings.tls_ca_cert and settings.redis_url.startswith("rediss://"):
+        redis_kwargs["ssl_ca_certs"] = settings.tls_ca_cert
+        redis_kwargs["ssl_cert_reqs"] = "required"
+        redis_kwargs["ssl_check_hostname"] = False
+    redis = Redis.from_url(settings.redis_url, **redis_kwargs)
     app.state.redis = redis
 
-    engine = create_engine(settings.database_url) if settings.database_url else None
+    engine = (
+        create_engine(settings.database_url, tls_ca_cert=settings.tls_ca_cert)
+        if settings.database_url
+        else None
+    )
     app.state.db_engine = engine
     app.state.db_session_factory = create_session_factory(engine) if engine else None
 

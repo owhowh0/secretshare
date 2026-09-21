@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     database_url: str = ""  # postgresql+asyncpg://... ; empty disables audit logging
     redis_url: str = "redis://localhost:6379/0"
 
+    # TLS – path to the CA certificate used to verify PostgreSQL and Redis
+    # connections. Leave empty to connect without certificate verification.
+    tls_ca_cert: str = ""
+
     # Audit
     audit_enabled: bool = True
 
