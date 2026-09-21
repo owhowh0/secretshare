@@ -28,9 +28,9 @@ from app.core.config import Settings, get_settings
 from app.core.ids import new_payload_id
 from app.main import app
 from app.schemas.secrets import EncryptedKeyItem
-from app.services.exceptions import SecretNotFoundError
+from app.services.exceptions import SecretAccessDeniedError, SecretNotFoundError
 from app.services.secrets import SecretService
-from app.storage.redis_store import SecretStore
+from app.storage.redis_store import BurnStatus, SecretStore
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
@@ -163,6 +163,106 @@ class TestAtomicBurn:
         ).ciphertext == CIPHERTEXT
         with pytest.raises(SecretNotFoundError):
             await service.retrieve_secret(payload_id, caller_identity=RECIPIENT_ID)
+
+
+class TestDeniedRevealIsNonDestructive:
+    """
+    A wrong recipient is refused without consuming the secret. The recipient
+    check runs inside the same Redis script as the delete, so these assert the
+    real Lua path, not a Python stand-in.
+    """
+
+    async def _create(self, service) -> str:
+        return (
+            await service.create_secret(
+                recipient_id=RECIPIENT_ID,
+                encrypted_keys=ENCRYPTED_KEY_ITEMS,
+                iv=IV,
+                ciphertext=CIPHERTEXT,
+            )
+        ).payload_id
+
+    @requires_redis
+    async def test_denied_reveal_leaves_key_and_ttl(self, service, redis):
+        payload_id = await self._create(service)
+        ttl_before = await redis.ttl(f"s:{payload_id}")
+
+        with pytest.raises(SecretAccessDeniedError):
+            await service.retrieve_secret(payload_id, caller_identity=OTHER_USER_ID)
+
+        assert await redis.exists(f"s:{payload_id}") == 1
+        assert 0 < await redis.ttl(f"s:{payload_id}") <= ttl_before
+
+        envelope = await service.retrieve_secret(payload_id, caller_identity=RECIPIENT_ID)
+        assert envelope.ciphertext == CIPHERTEXT
+        assert await redis.exists(f"s:{payload_id}") == 0
+
+    @requires_redis
+    async def test_concurrent_intruders_cannot_starve_the_recipient(self, service):
+        for _ in range(5):
+            payload_id = await self._create(service)
+            callers = [OTHER_USER_ID] * 10 + [RECIPIENT_ID] * 10
+
+            results = await asyncio.gather(
+                *[
+                    service.retrieve_secret(payload_id, caller_identity=caller)
+                    for caller in callers
+                ],
+                return_exceptions=True,
+            )
+
+            by_caller = list(zip(callers, results))
+            winners = [r for _, r in by_caller if not isinstance(r, Exception)]
+            assert len(winners) == 1, f"{len(winners)} readers received the secret"
+            assert winners[0].recipient_id == RECIPIENT_ID
+            # Every intruder is refused, whether before or after the burn it is
+            # either a denial or a miss — never a delivery.
+            for caller, result in by_caller:
+                if caller == OTHER_USER_ID:
+                    assert isinstance(result, (SecretAccessDeniedError, SecretNotFoundError))
+
+    @requires_redis
+    async def test_unparseable_payload_is_never_deleted(self, redis):
+        store = SecretStore(redis)
+        payload_id = new_payload_id()
+        await redis.set(f"s:{payload_id}", "not json", ex=60)
+        try:
+            result = await store.burn_for_recipient(payload_id, RECIPIENT_ID)
+
+            assert result.status is BurnStatus.DENIED
+            assert result.payload is None
+            assert await redis.exists(f"s:{payload_id}") == 1
+        finally:
+            await redis.delete(f"s:{payload_id}")
+
+    @requires_redis
+    async def test_missing_key_reports_missing(self, redis):
+        result = await SecretStore(redis).burn_for_recipient(new_payload_id(), RECIPIENT_ID)
+
+        assert result.status is BurnStatus.MISSING
+
+    @requires_redis
+    async def test_route_denies_then_serves_recipient(self, client):
+        created = await client.post("/secrets", json=_make_payload())
+        payload_id = created.json()["payload_id"]
+
+        app.dependency_overrides[get_current_user] = lambda: {
+            "preferred_username": OTHER_USER_ID,
+            "sub": "auth-sub-bob",
+        }
+        denied = await client.post("/secrets/reveal", json={"payload_id": payload_id})
+
+        app.dependency_overrides[get_current_user] = lambda: {
+            "preferred_username": RECIPIENT_ID,
+            "sub": "auth-sub-alice",
+        }
+        revealed = await client.post("/secrets/reveal", json={"payload_id": payload_id})
+        burned = await client.post("/secrets/reveal", json={"payload_id": payload_id})
+
+        assert denied.status_code == 403
+        assert revealed.status_code == 200
+        assert revealed.json()["ciphertext"] == CIPHERTEXT
+        assert burned.status_code == 404
 
 
 class TestNoEnumerationOracle:

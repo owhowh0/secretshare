@@ -77,12 +77,17 @@ class TestMeEndpoint:
 class TestErrorHandling:
     async def test_unhandled_exception_returns_500_without_leaking_traceback(self):
         from app.api.routes.secrets import get_secret_service
+        from app.core.auth import get_current_user
         from app.main import app
+        from tests.fakes import recipient_claims
 
         def _crashing_service():
             raise RuntimeError("Database password leaked in raw traceback :(")
 
         app.dependency_overrides[get_secret_service] = _crashing_service
+        # Reveal requires a signed-in user; without one the request would stop
+        # at the 403 and never reach the crashing service.
+        app.dependency_overrides[get_current_user] = recipient_claims
 
         try:
             transport = ASGITransport(app=app, raise_app_exceptions=False)

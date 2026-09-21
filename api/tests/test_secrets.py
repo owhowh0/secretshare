@@ -75,7 +75,7 @@ class BrokenStore:
     async def exists(self, payload_id: str) -> bool:
         raise RedisConnectionError("connection refused")
 
-    async def burn(self, payload_id: str) -> str | None:
+    async def burn_for_recipient(self, payload_id: str, recipient_id: str):
         raise RedisConnectionError("connection refused")
 
 
@@ -182,6 +182,70 @@ def test_retrieve_secret_unauthorized_recipient(store, audit) -> None:
         }
     finally:
         app.dependency_overrides.clear()
+
+
+class TestDeniedRevealKeepsSecret:
+    """A wrong recipient is refused without burning the secret (regression)."""
+
+    def _as(self, store, audit, username):
+        return _install(
+            make_secret_service(store),
+            audit,
+            current_user={"preferred_username": username, "sub": f"sub-{username}"},
+        )
+
+    def test_recipient_can_still_reveal_after_a_denied_attempt(self, store, audit):
+        try:
+            payload_id = _create(self._as(store, audit, RECIPIENT_ID)).json()["payload_id"]
+
+            denied = self._as(store, audit, OTHER_USER_ID).post(
+                "/secrets/reveal", json={"payload_id": payload_id}
+            )
+            assert denied.status_code == 403
+            assert payload_id in store.payloads, "a denied reveal burned the secret"
+
+            recipient = self._as(store, audit, RECIPIENT_ID)
+            assert recipient.get(f"/secrets/{payload_id}/exists").json() == {"exists": True}
+            revealed = recipient.post("/secrets/reveal", json={"payload_id": payload_id})
+        finally:
+            app.dependency_overrides.clear()
+
+        assert revealed.status_code == 200
+        assert revealed.json()["ciphertext"] == CIPHERTEXT
+        assert payload_id not in store.payloads
+        assert audit.events == ["created", "denied", "revealed"]
+
+    def test_repeated_denials_never_burn(self, store, audit):
+        try:
+            payload_id = _create(self._as(store, audit, RECIPIENT_ID)).json()["payload_id"]
+            intruder = self._as(store, audit, OTHER_USER_ID)
+            codes = [
+                intruder.post("/secrets/reveal", json={"payload_id": payload_id}).status_code
+                for _ in range(5)
+            ]
+        finally:
+            app.dependency_overrides.clear()
+
+        assert codes == [403] * 5
+        assert payload_id in store.payloads
+        assert store.ttls[payload_id] == DEFAULT_TTL
+
+    def test_burn_after_reveal_is_still_404_for_everyone(self, store, audit):
+        try:
+            payload_id = _create(self._as(store, audit, RECIPIENT_ID)).json()["payload_id"]
+            self._as(store, audit, RECIPIENT_ID).post(
+                "/secrets/reveal", json={"payload_id": payload_id}
+            )
+            after_for_recipient = self._as(store, audit, RECIPIENT_ID).post(
+                "/secrets/reveal", json={"payload_id": payload_id}
+            )
+            after_for_other = self._as(store, audit, OTHER_USER_ID).post(
+                "/secrets/reveal", json={"payload_id": payload_id}
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+        assert after_for_recipient.status_code == after_for_other.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -336,3 +400,9 @@ class TestSecretService:
             await service.retrieve_secret(
                 created.payload_id, caller_identity=OTHER_USER_ID
             )
+
+        # The denial must leave the secret for its recipient.
+        envelope = await service.retrieve_secret(
+            created.payload_id, caller_identity=RECIPIENT_ID
+        )
+        assert envelope.ciphertext == CIPHERTEXT

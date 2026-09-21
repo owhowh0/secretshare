@@ -10,7 +10,7 @@ from app.services.exceptions import (
     SecretNotFoundError,
     SecretStoreUnavailableError,
 )
-from app.storage.redis_store import SecretStore
+from app.storage.redis_store import BurnStatus, SecretStore
 from redis.exceptions import RedisError
 
 
@@ -88,17 +88,19 @@ class SecretService:
     async def retrieve_secret(
         self, payload_id: str, caller_identity: str
     ) -> SecretEnvelope:
+        # The recipient check happens inside the store's atomic burn: a denied
+        # caller must leave the secret intact for its real recipient.
         try:
-            raw_payload = await self._store.burn(payload_id)
+            result = await self._store.burn_for_recipient(payload_id, caller_identity)
         except RedisError as exc:
             raise SecretStoreUnavailableError() from exc
 
-        if raw_payload is None:
+        if result.status is BurnStatus.MISSING:
             raise SecretNotFoundError()
-
-        data = json.loads(raw_payload)
-        if data.get("recipient_id") != caller_identity:
+        if result.status is BurnStatus.DENIED:
             raise SecretAccessDeniedError()
+
+        data = json.loads(result.payload)
 
         return SecretEnvelope(
             recipient_id=data["recipient_id"],

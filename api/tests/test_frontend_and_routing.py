@@ -106,7 +106,8 @@ class TestPreviewSubpathResolutionEdgeCases:
         web_labels = data.get("services", {}).get("web", {}).get("labels", [])
         labels_text = "\n".join(web_labels)
 
-        assert "Host(`${PR_HOSTNAME}`)" in labels_text, (
+        # The host may carry a fallback, e.g. ${PR_HOSTNAME:-pr-N.staging-server}.
+        assert "Host(`${PR_HOSTNAME" in labels_text, (
             "docker-compose.preview.yml must define Host router for PR_HOSTNAME subdomain"
         )
         assert "tailscale" in data.get("services", {}), "docker-compose.preview.yml must define tailscale service"

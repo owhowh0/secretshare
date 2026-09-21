@@ -10,11 +10,12 @@ to log a `/secrets/<id>` path.
 import logging
 
 import pytest
+from app.core.auth import get_current_user
 from app.api.routes.secrets import get_audit_service, get_secret_service
 from app.core.ids import new_payload_id
 from app.core.logging_filters import RedactSecretPaths, install_secret_path_redaction
 from app.main import app
-from tests.fakes import make_secret_service
+from tests.fakes import make_secret_service, recipient_claims, secret_body
 from fastapi.testclient import TestClient
 
 CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
@@ -47,6 +48,7 @@ def client():
     secrets = make_secret_service()
     app.dependency_overrides[get_secret_service] = lambda: secrets
     app.dependency_overrides[get_audit_service] = lambda: NullAuditService()
+    app.dependency_overrides[get_current_user] = recipient_claims
 
     # The rate limiter reads app.state.redis, which only the lifespan sets.
     # Restored afterwards so this fixture cannot change how other suites run.
@@ -66,20 +68,20 @@ def client():
 class TestIdNeverReachesTheRequestLine:
     def test_reveal_keeps_the_id_out_of_the_url(self, client) -> None:
         payload_id = client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT}
+            "/secrets", json=secret_body(CIPHERTEXT)
         ).json()["payload_id"]
 
         revealed = client.post("/secrets/reveal", json={"payload_id": payload_id})
 
         assert revealed.status_code == 200
-        assert revealed.json() == {"ciphertext": CIPHERTEXT}
+        assert revealed.json()["ciphertext"] == CIPHERTEXT
         # This is the whole point of the route: uvicorn logs the request line,
         # and the request line is now id-free.
         assert payload_id not in str(revealed.request.url)
 
     def test_the_id_bearing_get_route_is_gone(self, client) -> None:
         payload_id = client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT}
+            "/secrets", json=secret_body(CIPHERTEXT)
         ).json()["payload_id"]
 
         # No route matches an id in the path any more, so nothing can put one

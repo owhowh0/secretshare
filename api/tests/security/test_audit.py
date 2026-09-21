@@ -9,12 +9,13 @@ audit failure cannot change what a secret endpoint returns.
 import logging
 
 import pytest
+from app.core.auth import get_current_user
 from app.api.routes.secrets import get_audit_service, get_secret_service
 from app.core.audit import AuditService, payload_id_prefix
 from app.core.ids import new_payload_id
 from app.db.models import PAYLOAD_ID_PREFIX_LENGTH
 from app.main import app
-from tests.fakes import make_secret_service
+from tests.fakes import make_secret_service, recipient_claims, secret_body
 from fastapi.testclient import TestClient
 
 CIPHERTEXT = "ZmFrZS1jaXBoZXJ0ZXh0LXBheWxvYWQ"
@@ -56,6 +57,7 @@ def client(audit: RecordingAuditService):
     secrets = make_secret_service()
     app.dependency_overrides[get_secret_service] = lambda: secrets
     app.dependency_overrides[get_audit_service] = lambda: audit
+    app.dependency_overrides[get_current_user] = recipient_claims
 
     yield TestClient(app)
 
@@ -67,7 +69,7 @@ def client(audit: RecordingAuditService):
 # ---------------------------------------------------------------------------
 class TestNoSecretMaterialInAudit:
     def test_full_payload_id_is_never_recorded(self, client, audit) -> None:
-        created = client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        created = client.post("/secrets", json=secret_body(CIPHERTEXT))
         payload_id = created.json()["payload_id"]
 
         client.post("/secrets/reveal", json={"payload_id": payload_id})
@@ -81,7 +83,7 @@ class TestNoSecretMaterialInAudit:
             assert payload_id not in str(event)
 
     def test_ciphertext_is_never_recorded(self, client, audit) -> None:
-        client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        client.post("/secrets", json=secret_body(CIPHERTEXT))
 
         assert CIPHERTEXT not in str(audit.events)
 
@@ -104,13 +106,13 @@ class TestNoSecretMaterialInAudit:
 # ---------------------------------------------------------------------------
 class TestEventsRecorded:
     def test_create_records_created(self, client, audit) -> None:
-        client.post("/secrets", json={"ciphertext": CIPHERTEXT})
+        client.post("/secrets", json=secret_body(CIPHERTEXT))
 
         assert [e["event_type"] for e in audit.events] == ["created"]
 
     def test_successful_reveal_records_revealed(self, client, audit) -> None:
         payload_id = client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT}
+            "/secrets", json=secret_body(CIPHERTEXT)
         ).json()["payload_id"]
         audit.events.clear()
 
@@ -120,7 +122,7 @@ class TestEventsRecorded:
 
     def test_second_read_records_denied(self, client, audit) -> None:
         payload_id = client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT}
+            "/secrets", json=secret_body(CIPHERTEXT)
         ).json()["payload_id"]
         client.post("/secrets/reveal", json={"payload_id": payload_id})
         audit.events.clear()
@@ -137,7 +139,7 @@ class TestEventsRecorded:
     def test_request_metadata_is_captured(self, client, audit) -> None:
         client.post(
             "/secrets",
-            json={"ciphertext": CIPHERTEXT},
+            json=secret_body(CIPHERTEXT),
             headers={"user-agent": "pytest-agent/1.0"},
         )
 
@@ -152,7 +154,7 @@ class TestEventsRecorded:
 class TestAuditDoesNotWeakenResponses:
     def test_burned_and_missing_responses_are_identical(self, client) -> None:
         payload_id = client.post(
-            "/secrets", json={"ciphertext": CIPHERTEXT}
+            "/secrets", json=secret_body(CIPHERTEXT)
         ).json()["payload_id"]
         client.post("/secrets/reveal", json={"payload_id": payload_id})
 
@@ -175,16 +177,17 @@ class TestAuditDoesNotWeakenResponses:
 
         app.dependency_overrides[get_secret_service] = lambda: secrets
         app.dependency_overrides[get_audit_service] = lambda: broken_audit
+        app.dependency_overrides[get_current_user] = recipient_claims
         try:
             with TestClient(app) as c, caplog.at_level(logging.ERROR):
-                created = c.post("/secrets", json={"ciphertext": CIPHERTEXT})
+                created = c.post("/secrets", json=secret_body(CIPHERTEXT))
                 assert created.status_code == 201
 
                 payload_id = created.json()["payload_id"]
                 revealed = c.post("/secrets/reveal", json={"payload_id": payload_id})
 
                 assert revealed.status_code == 200
-                assert revealed.json() == {"ciphertext": CIPHERTEXT}
+                assert revealed.json()["ciphertext"] == CIPHERTEXT
                 assert c.post("/secrets/reveal", json={"payload_id": payload_id}).status_code == 404
         finally:
             app.dependency_overrides.clear()
