@@ -17,8 +17,8 @@ export default function SecretRedirectPage() {
   }, [params, router])
 
   return (
-    <div style={{ maxWidth: '640px', margin: '3rem auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
-      <p style={{ color: '#4a5568' }}>Loading secret…</p>
+    <div style={{ maxWidth: '560px', margin: '4rem auto', textAlign: 'center', padding: '0 1rem' }}>
+      <p className="muted">Loading secret…</p>
     </div>
   )
 }
