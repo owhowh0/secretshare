@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSession, signIn, signOut } from 'next-auth/react'
 import {
   decryptAesGcm,
@@ -31,6 +31,25 @@ interface DeviceKeyItem {
   label?: string
 }
 
+/** Attach .released class for the bounce-back keyframe, remove after it fires. */
+function triggerBounce(el: HTMLElement | null) {
+  if (!el) return
+  el.classList.remove('released')
+  // Force reflow so the class can be re-added
+  void el.offsetWidth
+  el.classList.add('released')
+  el.addEventListener('animationend', () => el.classList.remove('released'), { once: true })
+}
+
+/** Attach .shake class, remove after animation completes so it can re-trigger. */
+function triggerShake(el: HTMLElement | null) {
+  if (!el) return
+  el.classList.remove('shake')
+  void el.offsetWidth
+  el.classList.add('shake')
+  el.addEventListener('animationend', () => el.classList.remove('shake'), { once: true })
+}
+
 export default function Page() {
   const { data: session, status } = useSession()
   const username = session?.user?.name ?? null
@@ -58,6 +77,11 @@ export default function Page() {
   const [retrieveResult, setRetrieveResult] = useState<string | null>(null)
   const [retrieveError, setRetrieveError] = useState<string | null>(null)
   const [retrieveLoading, setRetrieveLoading] = useState(false)
+
+  // Refs for shake / bounce targets
+  const createBtnRef = useRef<HTMLButtonElement>(null)
+  const retrieveBtnRef = useRef<HTMLButtonElement>(null)
+  const copyBtnRef = useRef<HTMLButtonElement>(null)
 
   const getHeaders = useCallback((): Record<string, string> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -108,7 +132,10 @@ export default function Page() {
   // Check existence non-destructively before showing modal
   const handlePreRevealCheck = useCallback(async (explicitId?: string) => {
     const idToUse = (typeof explicitId === 'string' ? explicitId : payloadId).trim()
-    if (!idToUse) return
+    if (!idToUse) {
+      triggerShake(retrieveBtnRef.current)
+      return
+    }
     setRetrieveLoading(true)
     setRetrieveError(null)
     setRetrieveResult(null)
@@ -129,6 +156,7 @@ export default function Page() {
       setShowConfirmModal(true)
     } catch (e) {
       setRetrieveError(e instanceof Error ? e.message : 'Check failed')
+      triggerShake(retrieveBtnRef.current)
     } finally {
       setRetrieveLoading(false)
     }
@@ -168,7 +196,10 @@ export default function Page() {
   }
 
   async function handleCreate() {
-    if (!recipientId.trim() || !secret.trim()) return
+    if (!recipientId.trim() || !secret.trim()) {
+      triggerShake(createBtnRef.current)
+      return
+    }
     setCreateLoading(true)
     setCreateResult(null)
     setCreateError(null)
@@ -231,8 +262,10 @@ export default function Page() {
         link,
       })
       setSecret('')
+      triggerBounce(createBtnRef.current)
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Unknown error')
+      triggerShake(createBtnRef.current)
     } finally {
       setCreateLoading(false)
     }
@@ -308,234 +341,232 @@ export default function Page() {
   }
 
   return (
-    <main style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1rem' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <main className="app-main">
+      {/* ── Header ── */}
+      <header className="app-header">
         <h1>SecretShare</h1>
         <div id="auth-section">
           {status === 'authenticated' && username ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div className="row">
               <span className="muted">{username}</span>
               <button
                 id="logout-btn"
+                className="btn btn-ghost"
                 onClick={handleLogout}
-                style={{ background: '#333', fontSize: '0.85rem', padding: '0.4rem 0.8rem', cursor: 'pointer' }}
+                onPointerUp={(e) => triggerBounce(e.currentTarget)}
               >
                 Logout
               </button>
             </div>
           ) : (
-            <button id="login-btn" onClick={handleLogin} style={{ cursor: 'pointer' }}>
+            <button
+              id="login-btn"
+              className="btn"
+              onClick={handleLogin}
+              onPointerUp={(e) => triggerBounce(e.currentTarget)}
+            >
               Login with Keycloak
             </button>
           )}
         </div>
       </header>
 
-      {onboardingError && <p className="error" style={{ color: '#e53e3e' }}>Device Key Warning: {onboardingError}</p>}
-      {deviceRegistered && <p className="muted" style={{ fontSize: '0.8rem', color: '#38a169' }}>Device key registered & ready for E2E encryption.</p>}
+      {/* ── Device status ── */}
+      {onboardingError && (
+        <p className="error-box">Device key warning: {onboardingError}</p>
+      )}
+      {deviceRegistered && (
+        <p className="status-ok">&#x2713; Device key registered — E2E encryption ready</p>
+      )}
 
-      <hr style={{ margin: '1.5rem 0' }} />
+      <hr className="divider" />
 
-      <section>
-        <h2>Create Secret (E2E Encrypted)</h2>
-        <input
-          type="text"
-          value={recipientId}
-          onChange={(e) => setRecipientId(e.target.value)}
-          placeholder="Recipient Username (Keycloak)"
-          style={{ width: '100%', marginBottom: '0.75rem', padding: '0.5rem' }}
-        />
-        <textarea
-          value={secret}
-          onChange={(e) => setSecret(e.target.value)}
-          rows={5}
-          placeholder="Type your secret here…"
-          style={{ width: '100%', padding: '0.5rem' }}
-        />
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-          <select
-            id="ttl-select"
-            value={ttlSeconds}
-            onChange={(e) => setTtlSeconds(Number(e.target.value))}
-            style={{ padding: '0.4rem' }}
-          >
-            {TTL_OPTIONS.map((o) => (
-              <option key={o.seconds} value={o.seconds}>
-                Expires in {o.label}
-              </option>
-            ))}
-          </select>
-          <button
-            id="create-btn"
-            onClick={handleCreate}
-            disabled={createLoading || !secret.trim() || !recipientId.trim()}
-            style={{ padding: '0.4rem 1rem', cursor: 'pointer' }}
-          >
-            {createLoading ? 'Encrypting & Creating…' : 'Encrypt & Share'}
-          </button>
+      {/* ── Create Secret ── */}
+      <section className="glass" style={{ borderRadius: '16px', padding: '1.25rem' }}>
+        <h2>Create Secret</h2>
+        <div className="col">
+          <input
+            type="text"
+            value={recipientId}
+            onChange={(e) => setRecipientId(e.target.value)}
+            placeholder="Recipient username (Keycloak)"
+            style={{ width: '100%' }}
+          />
+          <textarea
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            rows={5}
+            placeholder="Type your secret here…"
+            style={{ width: '100%', resize: 'vertical' }}
+          />
+          <div className="row">
+            <select
+              id="ttl-select"
+              value={ttlSeconds}
+              onChange={(e) => setTtlSeconds(Number(e.target.value))}
+              style={{ flexShrink: 0 }}
+            >
+              {TTL_OPTIONS.map((o) => (
+                <option key={o.seconds} value={o.seconds}>
+                  Expires in {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              id="create-btn"
+              ref={createBtnRef}
+              className="btn"
+              onClick={handleCreate}
+              disabled={createLoading || !secret.trim() || !recipientId.trim()}
+            >
+              {createLoading ? 'Encrypting…' : 'Encrypt & Share'}
+            </button>
+          </div>
         </div>
 
         {createResult && (
-          <div
-            id="create-result"
-            style={{ marginTop: '1rem', padding: '0.85rem', background: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}
-          >
-            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.9rem' }}>Secret Share Link:</p>
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.35rem', alignItems: 'center' }}>
+          <div id="create-result" className="result-card" style={{ marginTop: '1rem' }}>
+            <p className="muted" style={{ marginBottom: '0.5rem' }}>Secret share link</p>
+            <div className="row" style={{ marginBottom: '0.5rem' }}>
               <input
                 id="secret-link-input"
                 type="text"
                 readOnly
                 value={createResult.link}
+                className="link-input"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
-                style={{ flex: 1, padding: '0.45rem 0.5rem', fontSize: '0.85rem', background: '#fff', border: '1px solid #cbd5e0', borderRadius: '4px' }}
               />
               <button
                 id="copy-link-btn"
+                ref={copyBtnRef}
                 type="button"
+                className={`btn${copiedLink ? ' btn-ghost' : ''}`}
+                style={{ flexShrink: 0 }}
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(createResult.link)
-                    setCopiedLink(true)
-                    setTimeout(() => setCopiedLink(false), 2000)
                   } catch {
                     const input = document.getElementById('secret-link-input') as HTMLInputElement
                     if (input) {
                       input.select()
                       document.execCommand('copy')
-                      setCopiedLink(true)
-                      setTimeout(() => setCopiedLink(false), 2000)
                     }
                   }
-                }}
-                style={{
-                  padding: '0.45rem 0.85rem',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  background: copiedLink ? '#38a169' : '#3182ce',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  whiteSpace: 'nowrap',
+                  setCopiedLink(true)
+                  triggerBounce(copyBtnRef.current)
+                  setTimeout(() => setCopiedLink(false), 2000)
                 }}
               >
-                {copiedLink ? 'Copied!' : 'Copy Link'}
+                {copiedLink ? 'Copied!' : 'Copy'}
               </button>
             </div>
-
-            <hr style={{ margin: '0.75rem 0', borderColor: '#edf2f7' }} />
-
-            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.85rem' }}>Secret Payload ID:</p>
-            <code id="secret-payload-id" style={{ wordBreak: 'break-all', fontSize: '0.85rem' }}>{createResult.id}</code>
-            <p className="muted" style={{ margin: '0.35rem 0 0 0', fontSize: '0.85rem' }}>
-              Expires {createResult.expiresAt}
-            </p>
+            <hr className="divider" style={{ margin: '0.6rem 0' }} />
+            <p className="muted" style={{ marginBottom: '0.25rem' }}>Payload ID</p>
+            <code id="secret-payload-id" style={{ wordBreak: 'break-all', display: 'block', marginBottom: '0.35rem' }}>
+              {createResult.id}
+            </code>
+            <p className="muted">Expires {createResult.expiresAt}</p>
           </div>
         )}
-        {createError && <p className="error" style={{ color: '#e53e3e', marginTop: '0.5rem' }}>{createError}</p>}
+
+        {createError && (
+          <p className="error-box" style={{ marginTop: '0.75rem' }}>{createError}</p>
+        )}
       </section>
 
-      <hr style={{ margin: '1.5rem 0' }} />
-
-      <section>
+      {/* ── Retrieve Secret ── */}
+      <section className="glass" style={{ borderRadius: '16px', padding: '1.25rem' }}>
         <h2>Retrieve Secret</h2>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="row">
           <input
             type="text"
             value={payloadId}
             onChange={(e) => setPayloadId(e.target.value)}
             placeholder="Payload ID"
-            style={{ flex: 1, padding: '0.5rem' }}
+            style={{ flex: 1 }}
           />
           <button
             id="retrieve-btn"
+            ref={retrieveBtnRef}
+            className="btn"
             onClick={() => handlePreRevealCheck()}
             disabled={retrieveLoading || !payloadId.trim()}
-            style={{ padding: '0.5rem 1rem', cursor: 'pointer' }}
+            onPointerUp={(e) => {
+              if (!retrieveLoading && payloadId.trim()) triggerBounce(e.currentTarget)
+            }}
           >
             {retrieveLoading ? 'Verifying…' : 'Reveal Secret'}
           </button>
         </div>
 
         {retrieveResult && (
-          <div id="retrieve-result" style={{ marginTop: '1rem', padding: '1rem', background: '#f0fff4', border: '1px solid #c6f6d5', borderRadius: '4px' }}>
-            <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold', color: '#22543d' }}>Decrypted Secret Plaintext:</p>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{retrieveResult}</pre>
+          <div id="retrieve-result" className="result-card" style={{ marginTop: '0.75rem' }}>
+            <p className="status-ok" style={{ marginBottom: '0.5rem' }}>&#x2713; Decrypted secret plaintext</p>
+            <pre style={{ margin: 0 }}>{retrieveResult}</pre>
           </div>
         )}
-        {retrieveError && <p className="error" style={{ color: '#e53e3e', marginTop: '0.5rem' }}>{retrieveError}</p>}
+
+        {retrieveError && (
+          <p className="error-box" style={{ marginTop: '0.75rem' }}>{retrieveError}</p>
+        )}
       </section>
 
-      {/* Safe Reveal Warning Modal */}
+      {/* ── Burn-After-Reading Modal ── */}
       {showConfirmModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: '#fff',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              maxWidth: '450px',
-              width: '90%',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-            }}
-          >
-            <h3 style={{ marginTop: 0, color: '#c53030' }}>Burn-After-Reading Warning</h3>
-            <p style={{ color: '#4a5568', lineHeight: 1.5 }}>
-              This secret is stored ephemerally. Revealing it will <strong>permanently and irreversibly destroy</strong> it from the server.
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <h3 style={{ color: 'var(--danger)', marginBottom: '0.75rem' }}>
+              Burn-After-Reading Warning
+            </h3>
+            <p style={{ color: 'var(--fg-dim)', lineHeight: 1.6, marginBottom: '1rem' }}>
+              This secret is stored ephemerally. Revealing it will{' '}
+              <strong style={{ color: 'var(--fg)' }}>permanently and irreversibly destroy</strong>{' '}
+              it from the server.
             </p>
 
             {status === 'authenticated' && username ? (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+              <div className="row-end" style={{ marginTop: '1.25rem' }}>
                 <button
                   id="cancel-reveal-btn"
+                  className="btn btn-ghost"
                   onClick={() => setShowConfirmModal(false)}
-                  style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onPointerUp={(e) => triggerBounce(e.currentTarget)}
                 >
                   Cancel
                 </button>
                 <button
                   id="confirm-reveal-btn"
+                  className="btn btn-danger"
                   onClick={handleConfirmReveal}
-                  style={{ padding: '0.5rem 1rem', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onPointerUp={(e) => triggerBounce(e.currentTarget)}
                 >
-                  Reveal & Burn
+                  Reveal &amp; Burn
                 </button>
               </div>
             ) : (
-              <div>
-                <p style={{ color: '#718096', fontSize: '0.85rem', margin: '0.5rem 0 1rem 0' }}>
-                  You must log in with Keycloak as the intended recipient to decrypt and access this secret.
+              <>
+                <p className="muted" style={{ marginBottom: '1rem' }}>
+                  Log in as the intended recipient to decrypt and access this secret.
                 </p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <div className="row-end">
                   <button
                     id="cancel-reveal-btn"
+                    className="btn btn-ghost"
                     onClick={() => setShowConfirmModal(false)}
-                    style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    onPointerUp={(e) => triggerBounce(e.currentTarget)}
                   >
                     Cancel
                   </button>
                   <button
                     id="modal-login-btn"
+                    className="btn"
                     onClick={handleLogin}
-                    style={{ padding: '0.5rem 1rem', background: '#3182ce', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    onPointerUp={(e) => triggerBounce(e.currentTarget)}
                   >
                     Login to Reveal
                   </button>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
