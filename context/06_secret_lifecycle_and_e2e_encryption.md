@@ -21,11 +21,15 @@ A secret is **addressed to one recipient** (a Keycloak username) and **encrypted
 2. `encryptAesGcm(plaintext)` → `ciphertext`, `iv`, raw AES key.
 3. Wrap the AES key with each device's RSA public key.
 4. `POST /api/secrets` with the envelope and optional `ttl_seconds` → `{payload_id, ttl_seconds, expires_at}`.
+5. The UI generates both the `payload_id` and a direct shareable link (`https://<domain>/?id=<payload_id>`) with a one-click copy button.
 
 ### Reveal (recipient, `handlePreRevealCheck` → `handleConfirmReveal`)
-1. `POST /api/secrets/exists {"payload_id"}` → non-destructive check before the confirmation modal.
-2. `POST /api/secrets/reveal {"payload_id"}` with a Bearer token → envelope (the secret is burned server-side in the same step).
-3. Try each `encrypted_keys[i]` with the local private key; decrypt the AES-GCM ciphertext in memory.
+1. Recipient accesses the shareable link (`/?id=<payload_id>`, `/#<payload_id>`, or `/secret/<payload_id>`) or enters the payload ID manually.
+2. `POST /api/secrets/exists {"payload_id"}` → non-destructive check before the confirmation modal.
+3. If the secret exists, the burn-after-reading warning notice modal appears automatically.
+4. If not authenticated, the recipient is prompted to log in via Keycloak before revealing.
+5. On clicking "Reveal & Burn", `POST /api/secrets/reveal {"payload_id"}` with a Bearer token → envelope (the secret is burned server-side in the same step).
+6. Try each `encrypted_keys[i]` with the local private key; decrypt the AES-GCM ciphertext in memory.
 
 ---
 
@@ -89,7 +93,7 @@ The code cites numbered invariants from `CLAUDE.md`. That file is **gitignored**
 | 6 | Nothing secret is logged: no full payload id, ciphertext or token. | `core/logging_filters.py`, `core/audit.py` (8-character prefix + DB CHECK) |
 
 Related rules:
-- **AUD-6:** a payload id never appears in a URL path or query string, because request lines are written to uvicorn and Traefik logs and to browser history. `/reveal` and `/exists` take it in the body. `tests/security/test_access_log.py::test_no_route_takes_a_payload_id_in_the_path` fails if any `/secrets` route gains a path parameter.
+- **AUD-6:** a payload id never appears in a URL path or query string on the API, because request lines are written to uvicorn and Traefik logs and to browser history. `/reveal` and `/exists` take it in the body. `tests/security/test_access_log.py::test_no_route_takes_a_payload_id_in_the_path` fails if any `/secrets` route gains a path parameter.
 - **Payload cap:** 64 KB (`MAX_PAYLOAD_BYTES=65536`), measured in UTF-8 bytes.
 - **No echoing:** 422 bodies never contain the rejected input.
 

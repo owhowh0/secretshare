@@ -32,6 +32,7 @@ See `07_working_conventions.md` for how changes are verified and merged.
 | #27 | `exists` moved from `GET /secrets/{id}/exists` to `POST /secrets/exists` (AUD-6) |
 | #28 | Context folder brought up to date |
 | #29 | Rate limits and audit use the real client IP behind Traefik and Tailscale (`TrustedProxyMiddleware`, `TRUSTED_PROXIES`) |
+| #30 | **Shareable secret links & auto burning notice:** secret creation yields a copyable link; opening link auto-checks existence, prompts burning warning notice modal, and handles reveal/login while keeping manual retrieval backwards-compatible |
 
 Note: the earlier plan of keeping the AES key in the URL `#fragment` was **not** built. #22 chose recipient-addressed envelopes with per-device RSA keys instead.
 
