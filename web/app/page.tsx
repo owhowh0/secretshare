@@ -423,18 +423,6 @@ export default function Page() {
               </button>
             </div>
 
-            <div style={{ marginTop: '0.5rem' }}>
-              <a
-                id="secret-link-anchor"
-                href={createResult.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '0.85rem', color: '#3182ce', textDecoration: 'underline' }}
-              >
-                Open secret link in new tab &rarr;
-              </a>
-            </div>
-
             <hr style={{ margin: '0.75rem 0', borderColor: '#edf2f7' }} />
 
             <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.85rem' }}>Secret Payload ID:</p>
