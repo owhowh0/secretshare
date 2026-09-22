@@ -1,119 +1,409 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
+/* ============================================================
+   COLOR TOKENS
+   ============================================================ */
+:root {
+    --bg-hard: #1d2021;
+    --bg: #282828;
+    --bg-soft: #32302f;
+    --surface-1: #3c3836;
+    --surface-2: #504945;
+    --surface-3: #665c54;
+    --border: #7c6f64;
+    --fg: #ebdbb2;
+    --fg-dim: #d5c4a1;
+    --fg-dimmer: #bdae93;
+    --fg-faint: #a89984;
+    --red: #fb4934;
+    --green: #b8bb26;
+    --yellow: #fabd2f;
+    --blue: #83a598;
+    --purple: #d3869b;
+    --aqua: #8ec07c;
+    --orange: #fe8019;
+    --accent: var(--orange);
+    --accent-fg: var(--bg-hard);
+    --danger: var(--red);
+    --success: var(--green);
+    --warning: var(--yellow);
+
+    /* ============================================================
+     MOTION TOKENS
+     ============================================================ */
+    --ease-out: cubic-bezier(0.2, 0, 0, 1);
+    --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-instant: 120ms;
+    --dur-fast: 150ms;
+    --dur-base: 250ms;
+    --dur-stagger: 100ms;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg-hard: #f9f5d7;
+        --bg: #fbf1c7;
+        --bg-soft: #f2e5bc;
+        --surface-1: #ebdbb2;
+        --surface-2: #d5c4a1;
+        --surface-3: #bdae93;
+        --border: #a89984;
+        --fg: #3c3836;
+        --fg-dim: #504945;
+        --fg-dimmer: #665c54;
+        --fg-faint: #7c6f64;
+        --red: #cc241d;
+        --green: #98971a;
+        --yellow: #d79921;
+        --blue: #458588;
+        --purple: #b16286;
+        --aqua: #689d6a;
+        --orange: #d65d0e;
+    }
+}
+
+/* ============================================================
+   BODY / LAYOUT
+   ============================================================ */
 body {
-  font-family: system-ui, sans-serif;
-  background: #0f0f0f;
-  color: #e8e8e8;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
+    font-family: var(--font-sans), system-ui, sans-serif;
+    background:
+        radial-gradient(ellipse 80% 60% at 50% -10%,
+            color-mix(in oklab, var(--orange) 18%, transparent),
+            transparent),
+        var(--bg-hard);
+    color: var(--fg);
+    min-height: 100vh;
+    padding: 0 1rem;
 }
 
-main {
-  width: 100%;
-  max-width: 560px;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
 h1 {
-  font-size: 1.4rem;
-  font-weight: 700;
-}
-
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+    font-family: var(--font-mono), monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--fg);
 }
 
 h2 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin-bottom: 0.75rem;
+    font-family: var(--font-mono), monospace;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--fg-dim);
+    margin-bottom: 0.75rem;
 }
 
-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+h3 {
+    font-family: var(--font-mono), monospace;
+    font-size: 1rem;
+    font-weight: 600;
 }
 
+p {
+    max-width: 65ch;
+}
+
+/* ============================================================
+   GLASS PANEL UTILITY
+   ============================================================ */
+.glass {
+    background: color-mix(in oklab, var(--surface-1) 55%, transparent);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+    box-shadow:
+        0 1px 2px color-mix(in oklab, var(--bg-hard) 30%, transparent),
+        0 8px 24px color-mix(in oklab, var(--bg-hard) 25%, transparent);
+}
+
+/* ============================================================
+   MAIN LAYOUT
+   ============================================================ */
+main.app-main {
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding: 2rem 1rem;
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+header.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ============================================================
+   INPUTS, TEXTAREA, SELECT
+   ============================================================ */
+input,
 textarea,
-select,
-input[type='text'] {
-  width: 100%;
-  padding: 0.75rem;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 6px;
-  color: inherit;
-  font-family: inherit;
-  font-size: 0.95rem;
-  resize: vertical;
+select {
+    padding: 0.75rem;
+    background: color-mix(in oklab, var(--surface-1) 80%, transparent);
+    border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+    border-radius: 8px;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.95rem;
+    transition-property: border-color, box-shadow;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
 }
 
+input:focus,
 textarea:focus,
-select:focus,
-input:focus {
-  outline: 2px solid #4f8ef7;
-  border-color: transparent;
+select:focus {
+    outline: 2px solid var(--accent);
+    border-color: transparent;
 }
 
-button {
-  padding: 0.6rem 1.2rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.95rem;
-  font-weight: 500;
-  transition: opacity 0.15s;
-  background: #4f8ef7;
-  color: #fff;
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--accent);
+    color: var(--accent-fg);
+    transition-property: opacity, background-color;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
 }
 
-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+.btn:active {
+    scale: 0.96;
 }
 
-button:hover:not(:disabled) {
-  opacity: 0.88;
+.btn.released {
+    animation: btn-bounce-back 350ms var(--ease-out);
 }
 
-.error {
-  font-size: 0.85rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 6px;
-  background: #2d1f1f;
-  border: 1px solid #4a2e2e;
-  color: #c87e7e;
+@keyframes btn-bounce-back {
+    0% {
+        scale: 0.96;
+    }
+
+    55% {
+        scale: 1.03;
+    }
+
+    100% {
+        scale: 1;
+    }
 }
 
-pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: #1a1a1a;
-  border: 1px solid #333;
-  border-radius: 6px;
-  padding: 0.75rem;
-  font-size: 0.95rem;
+.btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
-hr {
-  border: none;
-  border-top: 1px solid #222;
+.btn:hover:not(:disabled) {
+    opacity: 0.88;
+}
+
+/* Secondary / ghost button */
+.btn-ghost {
+    background: color-mix(in oklab, var(--surface-2) 70%, transparent);
+    color: var(--fg-dim);
+    border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+}
+
+.btn-ghost:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--surface-2) 90%, transparent);
+    opacity: 1;
+}
+
+/* Danger button */
+.btn-danger {
+    background: var(--danger);
+    color: var(--fg);
+}
+
+/* ============================================================
+   SHAKE ANIMATION
+   ============================================================ */
+@keyframes nuh-uh-shake {
+
+    10%,
+    90% {
+        translate: -1px 0;
+    }
+
+    20%,
+    80% {
+        translate: 2px 0;
+    }
+
+    30%,
+    50%,
+    70% {
+        translate: -4px 0;
+    }
+
+    40%,
+    60% {
+        translate: 4px 0;
+    }
+}
+
+.shake {
+    animation: nuh-uh-shake 400ms var(--ease-in-out);
+    border-color: var(--danger) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .shake {
+        animation: none;
+        outline: 2px solid var(--danger);
+    }
+
+    .btn:active {
+        scale: 1;
+    }
+
+    .btn.released {
+        animation: none;
+    }
+}
+
+/* ============================================================
+   RESULT / STATUS CARDS
+   ============================================================ */
+.result-card {
+    background: var(--surface-1);
+    border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+    border-radius: 12px;
+    padding: 1rem;
+}
+
+.error-box {
+    font-size: 0.875rem;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    background: color-mix(in oklab, var(--danger) 12%, var(--surface-1));
+    border: 1px solid color-mix(in oklab, var(--danger) 40%, transparent);
+    color: var(--danger);
+}
+
+.status-ok {
+    font-size: 0.8rem;
+    color: var(--success);
+    font-family: var(--font-mono), monospace;
 }
 
 .muted {
-  font-size: 0.85rem;
-  color: #888;
-  font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--fg-faint);
+    font-family: var(--font-mono), monospace;
+}
+
+/* ============================================================
+   DIVIDER
+   ============================================================ */
+hr.divider {
+    border: none;
+    border-top: 1px solid color-mix(in oklab, var(--border) 30%, transparent);
+    margin: 0;
+}
+
+/* ============================================================
+   MODAL OVERLAY
+   ============================================================ */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: color-mix(in oklab, var(--bg-hard) 70%, transparent);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-box {
+    background: var(--bg-soft);
+    border: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+    border-radius: 16px;
+    padding: 1.75rem;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: 0 8px 32px color-mix(in oklab, var(--bg-hard) 50%, transparent);
+}
+
+/* ============================================================
+   CODE / PRE
+   ============================================================ */
+code,
+pre {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.875rem;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--surface-1);
+    border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+    border-radius: 8px;
+    padding: 0.75rem;
+}
+
+/* ============================================================
+   LINK INPUT
+   ============================================================ */
+.link-input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
+    border-radius: 6px;
+    padding: 0.45rem 0.6rem;
+    color: var(--fg-dim);
+    font-family: var(--font-mono), monospace;
+    font-size: 0.8rem;
+    cursor: text;
+}
+
+/* ============================================================
+   ROW / FLEX HELPERS
+   ============================================================ */
+.row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.row-end {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
 }
