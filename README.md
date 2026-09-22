@@ -1,6 +1,6 @@
 # SecretShare
 
-SecretShare is a secure, ephemeral secret-sharing platform featuring **client-side end-to-end hybrid encryption** (Web Crypto API: ECDH P-256 + AES-GCM-256), zero-trust authentication via **Keycloak** (OAuth2 / OIDC with PKCE), **Next.js** frontend with NextAuth, **FastAPI** backend, ephemeral storage with **Redis**, audit logging in **PostgreSQL**, internal **TLS encryption** across datastores, and unified edge routing with **Traefik**.
+SecretShare is a secure, ephemeral secret-sharing platform featuring **client-side end-to-end hybrid encryption** (Web Crypto API: ECDH P-256 / RSA-OAEP 2048 + AES-GCM-256), zero-trust authentication via **Keycloak** (OAuth2 / OIDC with PKCE), **Next.js** frontend with NextAuth, **FastAPI** backend, ephemeral storage with **Redis**, audit logging in **PostgreSQL**, internal **TLS encryption** across datastores, and unified edge routing with **Traefik**.
 
 ---
 
@@ -20,7 +20,8 @@ SecretShare is a secure, ephemeral secret-sharing platform featuring **client-si
 
 - **Zero-Knowledge Architecture**: Secrets are encrypted in the browser before transmission using the Web Crypto API. The server only stores opaque ciphertext.
 - **One-Time Burn & Ephemeral TTL**: Secrets are automatically deleted upon first retrieval (burn-on-read) or when their configurable TTL expires.
-- **Client-Side Hybrid Encryption**: Recipients publish ECDH P-256 device public keys. Senders encrypt a random AES-GCM-256 key with the recipient's public key; only the recipient's private key can decrypt the secret.
+- **Client-Side Hybrid Encryption**: Recipients publish device public keys. Senders encrypt a random AES-GCM-256 key with the recipient's public key; only the recipient's private key can decrypt the secret.
+- **Shareable Links & Burn Warning**: Creating a secret produces a direct shareable link (`/?id=<payload_id>`). Opening the link automatically verifies existence and prompts a burn-after-reading warning notice before one-time retrieval.
 - **Internal Datastore TLS**: Both PostgreSQL and Redis communicate over TLS using certificates provisioned at boot by an automated `tls-init` service.
 - **OIDC / OAuth2 with PKCE**: Integrated Keycloak realm pre-provisioned for browser and API authentication.
 - **Edge Path-Based Routing**: Traefik handles all ingress routing on a single port without complex host subdomain configurations.
@@ -158,18 +159,22 @@ The system includes pre-provisioned testing accounts imported automatically on s
 SecretShare implements zero-knowledge encryption directly inside the browser using standard Web Crypto primitives:
 
 1. **Device Key Registration**:
-   - Each authenticated user generates an **ECDH P-256** key pair in their browser.
-   - The private key is stored securely in IndexedDB; the public key is registered with the backend at `POST /keys/device`.
+   - Each authenticated user generates an RSA-OAEP key pair in their browser.
+   - The private key is stored securely in IndexedDB; the public key is registered with the backend at `POST /api/keys/register`.
 2. **Secret Creation (Sender)**:
-   - Sender fetches the recipient's ECDH public key from `GET /keys/device/{user_id}`.
+   - Sender fetches the recipient's active device public keys from `GET /api/keys/{user_id}`.
    - Sender generates a random **AES-256-GCM** content encryption key (CEK).
    - The secret payload is encrypted with the CEK.
-   - Sender derives a shared secret via ECDH and encrypts the CEK.
-   - The encrypted payload is posted to `POST /secrets`.
+   - Sender encrypts the CEK for each recipient device using RSA-OAEP.
+   - The encrypted payload is posted to `POST /api/secrets`.
+   - The sender receives the `payload_id` and a direct shareable link (`https://<domain>/?id=<payload_id>`) with a copy button.
 3. **Secret Retrieval (Recipient)**:
-   - Recipient fetches the encrypted payload using `POST /secrets/reveal`.
-   - The payload is burned immediately from Redis (one-time read).
-   - Recipient decrypts the CEK using their private ECDH key and decrypts the secret in the browser.
+   - Recipient accesses the shareable link (or pastes the payload ID into the manual retrieval field).
+   - A non-destructive existence check runs (`POST /api/secrets/exists`), and if valid, displays the **Burn-After-Reading Warning** notice modal.
+   - If not authenticated, the recipient is prompted to log in via Keycloak.
+   - Upon clicking "Reveal & Burn", the recipient calls `POST /api/secrets/reveal` with their Bearer token.
+   - The payload is burned atomically from Redis (one-time read).
+   - Recipient decrypts the CEK using their device private key and decrypts the secret plaintext in the browser.
 
 ---
 

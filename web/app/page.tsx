@@ -43,7 +43,12 @@ export default function Page() {
   const [recipientId, setRecipientId] = useState('')
   const [secret, setSecret] = useState('')
   const [ttlSeconds, setTtlSeconds] = useState(600)
-  const [createResult, setCreateResult] = useState<{ id: string; expiresAt: string } | null>(null)
+  const [createResult, setCreateResult] = useState<{
+    id: string
+    expiresAt: string
+    link: string
+  } | null>(null)
+  const [copiedLink, setCopiedLink] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createLoading, setCreateLoading] = useState(false)
 
@@ -100,8 +105,62 @@ export default function Page() {
     onboardDevice()
   }, [status, session, username, getHeaders])
 
+  // Check existence non-destructively before showing modal
+  const handlePreRevealCheck = useCallback(async (explicitId?: string) => {
+    const idToUse = (typeof explicitId === 'string' ? explicitId : payloadId).trim()
+    if (!idToUse) return
+    setRetrieveLoading(true)
+    setRetrieveError(null)
+    setRetrieveResult(null)
+
+    try {
+      // Id in the body, not the URL, so it stays out of access logs (AUD-6).
+      const res = await fetch(`${API_BASE}/secrets/exists`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ payload_id: idToUse }),
+      })
+      if (!res.ok) throw new Error(`Failed to check secret existence (${res.status})`)
+      const { exists } = await res.json()
+      if (!exists) {
+        throw new Error('Secret not found or already retrieved.')
+      }
+      setPayloadId(idToUse)
+      setShowConfirmModal(true)
+    } catch (e) {
+      setRetrieveError(e instanceof Error ? e.message : 'Check failed')
+    } finally {
+      setRetrieveLoading(false)
+    }
+  }, [payloadId, getHeaders])
+
+  // Detect secret link or ID in URL (?id=..., ?payload_id=..., #...) and trigger burning notice
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (status === 'loading') return
+
+    const searchParams = new URLSearchParams(window.location.search)
+    let urlId = searchParams.get('id') || searchParams.get('payload_id')
+
+    if (!urlId && window.location.hash) {
+      const hash = window.location.hash.slice(1)
+      if (hash.startsWith('id=')) {
+        urlId = hash.slice(3)
+      } else if (hash.length > 0 && !hash.includes('/')) {
+        urlId = hash
+      }
+    }
+
+    if (urlId && urlId.trim()) {
+      const cleanId = urlId.trim()
+      setPayloadId(cleanId)
+      handlePreRevealCheck(cleanId)
+    }
+  }, [status, handlePreRevealCheck])
+
   async function handleLogin() {
-    await signIn('keycloak')
+    const callbackUrl = typeof window !== 'undefined' ? window.location.href : undefined
+    await signIn('keycloak', callbackUrl ? { callbackUrl } : undefined)
   }
 
   async function handleLogout() {
@@ -161,39 +220,21 @@ export default function Page() {
 
       if (!res.ok) throw new Error(`API returned ${res.status}`)
       const { payload_id, expires_at } = await res.json()
-      setCreateResult({ id: payload_id, expiresAt: new Date(expires_at).toLocaleString() })
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : ''
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+      const link = `${origin}${basePath}/?id=${encodeURIComponent(payload_id)}`
+
+      setCreateResult({
+        id: payload_id,
+        expiresAt: new Date(expires_at).toLocaleString(),
+        link,
+      })
       setSecret('')
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       setCreateLoading(false)
-    }
-  }
-
-  // Check existence non-destructively before showing modal
-  async function handlePreRevealCheck() {
-    if (!payloadId.trim()) return
-    setRetrieveLoading(true)
-    setRetrieveError(null)
-    setRetrieveResult(null)
-
-    try {
-      // Id in the body, not the URL, so it stays out of access logs (AUD-6).
-      const res = await fetch(`${API_BASE}/secrets/exists`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ payload_id: payloadId.trim() }),
-      })
-      if (!res.ok) throw new Error(`Failed to check secret existence (${res.status})`)
-      const { exists } = await res.json()
-      if (!exists) {
-        throw new Error('Secret not found or already retrieved.')
-      }
-      setShowConfirmModal(true)
-    } catch (e) {
-      setRetrieveError(e instanceof Error ? e.message : 'Check failed')
-    } finally {
-      setRetrieveLoading(false)
     }
   }
 
@@ -249,6 +290,16 @@ export default function Page() {
 
       setRetrieveResult(plaintext)
       setPayloadId('')
+
+      // Clean up URL query / hash to avoid re-triggering check on page refresh
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        if (url.searchParams.has('id') || url.searchParams.has('payload_id')) {
+          url.searchParams.delete('id')
+          url.searchParams.delete('payload_id')
+          window.history.replaceState({}, '', url.pathname + (url.hash || ''))
+        }
+      }
     } catch (e) {
       setRetrieveError(e instanceof Error ? e.message : 'Decryption failed')
     } finally {
@@ -323,11 +374,72 @@ export default function Page() {
             {createLoading ? 'Encrypting & Creating…' : 'Encrypt & Share'}
           </button>
         </div>
+
         {createResult && (
-          <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '4px' }}>
-            <p style={{ margin: 0, fontWeight: 'bold' }}>Secret Payload ID:</p>
-            <code style={{ wordBreak: 'break-all' }}>{createResult.id}</code>
-            <p className="muted" style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem' }}>
+          <div
+            id="create-result"
+            style={{ marginTop: '1rem', padding: '0.85rem', background: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+          >
+            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.9rem' }}>Secret Share Link:</p>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.35rem', alignItems: 'center' }}>
+              <input
+                id="secret-link-input"
+                type="text"
+                readOnly
+                value={createResult.link}
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                style={{ flex: 1, padding: '0.45rem 0.5rem', fontSize: '0.85rem', background: '#fff', border: '1px solid #cbd5e0', borderRadius: '4px' }}
+              />
+              <button
+                id="copy-link-btn"
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(createResult.link)
+                    setCopiedLink(true)
+                    setTimeout(() => setCopiedLink(false), 2000)
+                  } catch {
+                    const input = document.getElementById('secret-link-input') as HTMLInputElement
+                    if (input) {
+                      input.select()
+                      document.execCommand('copy')
+                      setCopiedLink(true)
+                      setTimeout(() => setCopiedLink(false), 2000)
+                    }
+                  }
+                }}
+                style={{
+                  padding: '0.45rem 0.85rem',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  background: copiedLink ? '#38a169' : '#3182ce',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {copiedLink ? 'Copied!' : 'Copy Link'}
+              </button>
+            </div>
+
+            <div style={{ marginTop: '0.5rem' }}>
+              <a
+                id="secret-link-anchor"
+                href={createResult.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '0.85rem', color: '#3182ce', textDecoration: 'underline' }}
+              >
+                Open secret link in new tab &rarr;
+              </a>
+            </div>
+
+            <hr style={{ margin: '0.75rem 0', borderColor: '#edf2f7' }} />
+
+            <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.85rem' }}>Secret Payload ID:</p>
+            <code id="secret-payload-id" style={{ wordBreak: 'break-all', fontSize: '0.85rem' }}>{createResult.id}</code>
+            <p className="muted" style={{ margin: '0.35rem 0 0 0', fontSize: '0.85rem' }}>
               Expires {createResult.expiresAt}
             </p>
           </div>
@@ -349,7 +461,7 @@ export default function Page() {
           />
           <button
             id="retrieve-btn"
-            onClick={handlePreRevealCheck}
+            onClick={() => handlePreRevealCheck()}
             disabled={retrieveLoading || !payloadId.trim()}
             style={{ padding: '0.5rem 1rem', cursor: 'pointer' }}
           >
@@ -358,7 +470,7 @@ export default function Page() {
         </div>
 
         {retrieveResult && (
-          <div style={{ marginTop: '1rem', padding: '1rem', background: '#f0fff4', border: '1px solid #c6f6d5', borderRadius: '4px' }}>
+          <div id="retrieve-result" style={{ marginTop: '1rem', padding: '1rem', background: '#f0fff4', border: '1px solid #c6f6d5', borderRadius: '4px' }}>
             <p style={{ margin: '0 0 0.5rem 0', fontWeight: 'bold', color: '#22543d' }}>Decrypted Secret Plaintext:</p>
             <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{retrieveResult}</pre>
           </div>
@@ -396,20 +508,47 @@ export default function Page() {
             <p style={{ color: '#4a5568', lineHeight: 1.5 }}>
               This secret is stored ephemerally. Revealing it will <strong>permanently and irreversibly destroy</strong> it from the server.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmReveal}
-                style={{ padding: '0.5rem 1rem', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-              >
-                Reveal & Burn
-              </button>
-            </div>
+
+            {status === 'authenticated' && username ? (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <button
+                  id="cancel-reveal-btn"
+                  onClick={() => setShowConfirmModal(false)}
+                  style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  id="confirm-reveal-btn"
+                  onClick={handleConfirmReveal}
+                  style={{ padding: '0.5rem 1rem', background: '#e53e3e', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  Reveal & Burn
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p style={{ color: '#718096', fontSize: '0.85rem', margin: '0.5rem 0 1rem 0' }}>
+                  You must log in with Keycloak as the intended recipient to decrypt and access this secret.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button
+                    id="cancel-reveal-btn"
+                    onClick={() => setShowConfirmModal(false)}
+                    style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    id="modal-login-btn"
+                    onClick={handleLogin}
+                    style={{ padding: '0.5rem 1rem', background: '#3182ce', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    Login to Reveal
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
