@@ -824,7 +824,7 @@ The fifth problem concerned rate limiting behind proxies. All users of an enviro
 
 The sixth problem appeared when the preview environments moved to HTTPS. Sign-in failed with an issuer mismatch, because Keycloak advertised its issuer as \texttt{https://<host>:80/keycloak/...}: Tailscale terminated HTTPS on port 443 and passed plain HTTP to Traefik on port 80, and Keycloak combined the forwarded scheme with the forwarded port. Since OpenID Connect clients must reject tokens whose issuer differs from the configured one \cite{oidccore}, the failure was correct behaviour of the client. It was fixed by making Traefik forward port 443 explicitly and by configuring the public host name of Keycloak for each preview.
 
-A common lesson of these cases is that security properties must be tested end to end in an environment that resembles production. Each of the five problems passed unit tests at some point and was found only through an integration test, a preview deployment or a look at real logs.
+A common lesson of these cases is that security properties must be tested end to end in an environment that resembles production. Each of the six problems passed unit tests at some point and was found only through an integration test, a preview deployment or a look at real logs.
 
 % ==============================================================================
 \unnumberedsection{CONCLUSIONS}
@@ -851,7 +851,7 @@ In summary, the internship established a secure foundation for SecretShare: its 
 % ==============================================================================
 \startappendix{A}{Device Key Registration Sequence}
 
-\diagram{seq_register}{Sequence diagram of device key registration}{fig:seqregister}{According to Figure~A.1, a browser registers its public key after the first sign-in, and the previous active key of the same platform is revoked in the same transaction, as described in Section~3.1.}
+\diagram{seq_register}{Sequence diagram of device key registration}{fig:seqregister}{According to Figure~A.1, a browser registers its public key after the first sign-in, and the previous active key of the same platform is revoked in the same transaction, as described in Section~3.2.}
 
 \startappendix{B}{Data Model}
 
