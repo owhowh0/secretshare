@@ -700,16 +700,15 @@ To address the frontend security objectives mandated by the DAS guidelines, the 
 Compliance with these frontend protections is validated automatically through an automated security test harness in \texttt{web/tests/security/csp.test.mjs}. The test suite executes two categories of assertions against production builds. As a negative control, it parses HTTP response headers to ensure constant baseline protections (\texttt{X-Frame-Options: DENY}, \texttt{X-Content-Type-Options: nosniff}, and \texttt{Referrer-Policy: no-referrer}) and verifies that every inline script emitted during Next.js hydration possesses the dynamic per-response nonce. As a positive control, the harness replays the real Content Security Policy header over a local HTTP server serving a test document with an injected, unnonced inline script. The test confirms that script execution is strictly refused by the browser security sandbox, demonstrating that client-side secret material remains resilient against injection attacks.
 
 \subsec{Backend Architecture and API Routing}
-\enlargethispage{5\baselineskip}
 
-The API is a FastAPI application written in Python 3.12. All configuration is read by one Pydantic settings class from environment variables; no other module reads the environment. The settings class validates the configuration at start-up: it rejects lifetime bounds that contradict each other, malformed proxy address ranges and, in production mode, missing database or identity provider settings. Database migrations are applied by Alembic when the container starts, and a failed migration stops the container.
+The API is a FastAPI application built with Python 3.12. Application configuration is managed centrally by a unified Pydantic settings class that validates environment parameters at launch, rejecting conflicting lifetime limits, invalid CIDR proxy blocks, or missing OIDC/database credentials. Database schema migrations are executed automatically by Alembic during container initialization, halting startup upon migration failure.
 
 \begin{table}[H]
 \leadin{As shown in Table~3.1, the API exposes six endpoints, and the identifier of a secret is accepted only in request bodies.}
 \tablesetup
 \caption{Endpoints of the API}
 \label{tab:api}
-\begin{tabularx}{\textwidth}{|P{0.30\textwidth}|P{0.10\textwidth}|L|}
+\begin{tabularx}{\textwidth}{|P{0.38\textwidth}|P{0.11\textwidth}|L|}
 \hline
 \textbf{Endpoint} & \textbf{Auth} & \textbf{Behaviour} \\ \hline
 \texttt{POST /api/keys/register} & token & registers a device public key and revokes the previous key of the same platform \\ \hline
@@ -721,15 +720,14 @@ The API is a FastAPI application written in Python 3.12. All configuration is re
 \end{tabularx}
 \end{table}
 
-Errors are mapped centrally. A missing, burned or expired secret always produces the same 404 response, and there is deliberately no separate error for expiry, because a different answer would tell an attacker that a secret once existed. An unavailable Redis produces 503 with a \texttt{Retry-After} header. Validation errors produce 422 without the rejected input, so that a malformed request containing a secret is never echoed back or written to a log by a client.
+Errors are mapped centrally. Missing, burned, or expired secrets uniformly yield a generic 404 response without distinguishing expiration from non-existence, preventing adversaries from enumerating secret history. Redis connection loss produces a 503 response with a \texttt{Retry-After} header. Schema validation errors return 422 while strictly suppressing rejected payload bodies, ensuring malformed secrets are never echoed or persisted in external logs.
 
-Three pieces of middleware wrap the application. The body size middleware checks the declared length and counts the bytes actually received, and stops a request that exceeds 64 KB with status 413 before the body is parsed. The trusted proxy middleware accepts \texttt{X-Forwarded-For} only from configured proxy address ranges and takes the right-most untrusted address as the client, because the left-most entry is written by the client and can be forged. The header middleware sets \texttt{Cache-Control: no-store}, \texttt{X-Content-Type-Options}, \texttt{X-Frame-Options}, \texttt{Referrer-Policy: no-referrer} and a restrictive Content Security Policy on every API response.
+Three custom middleware layers wrap the application pipeline. A payload size filter validates declared lengths and received bytes, aborting requests exceeding 64~KB with status 413 prior to parsing. A trusted proxy layer processes \texttt{X-Forwarded-For} headers strictly from designated CIDR ranges, selecting the right-most untrusted IP address to thwart client header spoofing. Additionally, a security header middleware injects \texttt{Cache-Control: no-store}, \texttt{X-Content-Type-Options: nosniff}, anti-framing headers, and restrictive CSP headers on all responses.
 
-Rate limiting uses a fixed one-minute window per client address, stored as counters in Redis: 10 creations and 30 existence or reveal requests are allowed per minute, and further requests receive 429 with a \texttt{Retry-After} header. If Redis is unavailable, the limiter lets the request through and logs a warning, so the protection degrades before the service does.
+Rate limiting is enforced using fixed one-minute sliding windows in Redis: clients are limited to 10 secret creations and 30 existence/reveal checks per minute (exceeding requests receive 429 with \texttt{Retry-After}). If Redis becomes unreachable, the rate limiter fails open with warning logs to preserve core service availability.
 
-An implementation detail concerns the registration of keys. The envelope format allows a secret to be encrypted for several devices, and the sender's browser wraps the key for every active device it receives. The current registration endpoint, however, revokes the previous active key of the same platform whenever a new one is registered. In practice a user therefore has one active web device at a time: the browser in which the user signed in most recently. This keeps the key registry small but means that a secret sent before a user changes browser can only be read in the previous browser; the consequences are discussed in the Conclusions.
+Key registration maintains cryptographic freshness while bounding registry size. When a client registers a device public key, the endpoint revokes prior keys for that platform, effectively binding each user to their most recently authenticated browser. Secrets dispatched prior to a browser migration remain readable solely on the originating device, a trade-off evaluated further in the Conclusions.
 
-% ------------------------------------------------------------------------------
 \subsec{Security Controls}
 
 The DAS brief requires teams to explain, for each security measure, the problem it addresses, why it is relevant, how it is implemented, how it was tested and what remains open \cite{dasbrief}. The team kept these explanations in the repository for each control, and they are summarised here.
