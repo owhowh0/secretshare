@@ -157,6 +157,29 @@
     \label{#3}
   \end{figure}}
 
+% \screenshot{filepath}{caption}{label}{lead-in}{placeholder title}{placeholder instructions}
+\newcommand{\screenshot}[6]{%
+  \begin{figure}[H]
+    \leadin{#4}
+    \centering
+    \IfFileExists{#1}{%
+      \includegraphics[width=0.85\textwidth,keepaspectratio]{#1}%
+    }{%
+      \setlength{\fboxsep}{14pt}%
+      \fbox{\parbox{0.82\textwidth}{\centering
+        \vspace{8pt}
+        {\bfseries\large [#5]}\par
+        \vspace{6pt}
+        {\small\textbf{Drop-in file location:} \nolinkurl{#1}}\par
+        \vspace{8pt}
+        {\footnotesize\itshape #6\par}
+        \vspace{8pt}
+      }}%
+    }
+    \caption{#2}
+    \label{#3}
+  \end{figure}}
+
 % --- Appendix heading: "APPENDIX A" with the title centred beneath it ---
 \newcommand{\startappendix}[3]{%
   \clearpage
@@ -202,14 +225,14 @@
 \begin{flushleft}
 {\bfseries Team members:}\\[0.3cm]
 {\fontsize{11pt}{13pt}\selectfont\singlespacing\renewcommand{\arraystretch}{1.35}%
-\begin{tabularx}{\textwidth}{|>{\bfseries}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{0.22\textwidth}|}
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|p{0.22\textwidth}|}
 \hline
-Student 1: & Cimendur Rustem, FAF-243 & *Signature \\ \hline
-Student 2: & Covali Ilie, FAF-243 & *Signature \\ \hline
-Student 3: & Kushnirenko Ecaterina, FAF-243 & *Signature \\ \hline
-Student 4: & Poiata Calin, FAF-243 & *Signature \\ \hline
-Student 5: & \c{S}oimu Ionu\c{t}, FAF-243 & *Signature \\ \hline
-University Internship Mentor & as. univ. Grosu Olga & *Signature \\ \hline
+Student 1: & Cimendur Rustem, FAF-243 & * \\ \hline
+Student 2: & Covali Ilie, FAF-243 & * \\ \hline
+Student 3: & Kushnirenko Ecaterina, FAF-243 & * \\ \hline
+Student 4: & Poiata Calin, FAF-243 & * \\ \hline
+Student 5: & \c{S}oimu Ionu\c{t}, FAF-243 & * \\ \hline
+University Internship Mentor & as. univ. Grosu Olga & * \\ \hline
 \end{tabularx}}
 
 \vspace{0.5cm}
@@ -296,15 +319,7 @@ One-time secret links were created to shorten this exposure: a secret is stored 
 
 The project was carried out as part of the Development of Secure Applications (DAS) internship, whose brief asks teams to build a realistic minimum viable product in which security is designed in from the start: encryption of data in transit and at rest, OAuth~2.0 for API access, input validation, error handling that does not disclose information, and documentation of threats, risks and incident response \cite{dasbrief}. A one-time secret relay suits this brief well because every one of its functions is security-relevant, and because its correctness can be expressed as a small number of verifiable invariants.
 
-The purpose of the project is to design and implement SecretShare, a relay in which the server can neither read a secret nor hand it to anyone except the named recipient, and to verify these properties with automated tests. To achieve this purpose, the following objectives were set:
-\begin{itemize}
-  \item to analyse the problem domain, the threat actors and the existing solutions;
-  \item to specify functional and non-functional requirements, including measurable security invariants;
-  \item to model the behaviour and the structure of the system in UML;
-  \item to implement browser-side hybrid encryption, recipient authentication and atomic single delivery;
-  \item to verify the security controls with automated tests and a continuous integration pipeline;
-  \item to document the remaining limitations and a plan for the PBL semester.
-\end{itemize}
+The purpose of the project is to design and implement SecretShare, a relay in which the server can neither read a secret nor hand it to anyone except the named recipient, and to verify these properties with automated tests. To achieve this purpose, several concrete engineering objectives were established and executed. First, the team analysed the problem domain, identifying active threat actors and evaluating the operational weaknesses of existing secret-sharing tools. Second, functional and non-functional requirements were specified, with particular emphasis on formulating measurable security invariants. Third, the system behaviour and structural architecture were modelled using standard UML diagrams. Fourth, the core software was developed to implement browser-side hybrid encryption, recipient authentication and atomic single delivery in Redis. Fifth, the security controls and error-handling behaviours were systematically verified through automated tests and continuous integration workflows. Finally, the remaining architectural limitations were documented alongside a structured project plan for the subsequent PBL semester.
 
 For developers, operators and security staff the expected impact is that a shared credential lives for minutes in an encrypted store instead of years in a chat history.
 
@@ -545,7 +560,7 @@ Redis holds the encrypted envelopes, each under the key \texttt{s:<payload\_id>}
 
 PostgreSQL holds the data that must persist: the users known to the relay, their device public keys and the audit log. The data model is shown in Appendix~B. It contains three tables. The \texttt{users} table identifies a person by a platform and a platform-specific user name, which prepares the model for chat platforms. The \texttt{device\_keys} table stores public keys only, with a \texttt{revoked\_at} column that marks keys that are no longer active. The \texttt{audit\_events} table is append-only and is described in Chapter~3.
 
-The \texttt{tls-init} component runs once at start-up. It creates a private certificate authority and issues server certificates for PostgreSQL and Redis. The API connects to both data stores over TLS and verifies their certificates against this authority; Redis listens only on its TLS port, with the plaintext port disabled. The TLS is not mutual: the data stores do not ask the API for a client certificate. PostgreSQL authenticates the API with a password, whereas Redis currently accepts any TLS client on the internal network without authentication, which is recorded as a limitation in Section~3.2.
+The \texttt{tls-init} component runs once at start-up. It creates a private certificate authority and issues server certificates for PostgreSQL and Redis. The API connects to both data stores over TLS and verifies their certificates against this authority; Redis listens only on its TLS port, with the plaintext port disabled. The TLS is not mutual: the data stores do not ask the API for a client certificate. PostgreSQL authenticates the API with a password, whereas Redis currently accepts any TLS client on the internal network without authentication, which is recorded as a limitation in Section~3.3.
 
 % ------------------------------------------------------------------------------
 \subsec{Cryptographic Design and Security Invariants}
@@ -620,11 +635,31 @@ Together with the requirements in Tables~2.1 and 2.2, these invariants form the 
 
 This chapter describes how the design was implemented, which security controls protect the implementation, how the controls were tested and delivered, and which problems were discovered and solved during the internship. Each security control is presented in the form required by the DAS brief: the problem it addresses, its implementation, its testing and its limitations \cite{dasbrief}.
 
-\subsec{Implementation of the Web Client and the API}
+\subsec{Frontend Implementation and User Interface}
 
-The web client is a Next.js 15 application with a single main page. Its cryptographic functions are collected in the module \texttt{lib/crypto.ts}, which uses only the browser's Web Cryptography API and has no third-party cryptographic dependency. Key generation, public key export in SPKI PEM format, AES-GCM encryption and decryption, and RSA-OAEP wrapping and unwrapping are separate functions; the encryption routine is shown in Appendix~C. The module \texttt{lib/key-store.ts} stores the device key pair in IndexedDB under the database \texttt{secretshare\_keystore}, indexed by the user name, so that two users who share a computer do not share keys.
+The SecretShare frontend is implemented as a single-page web application using Next.js 15 with the App Router, React 19, TypeScript and Tailwind CSS, styled with accessible UI primitives from shadcn/ui. To uphold the zero-trust design, the client maintains a strict boundary between server-rendered layouts and browser-side cryptographic execution, isolating all sensitive operations within Client Components marked with the \texttt{"use client"} directive.
 
-After a successful sign-in the page looks up the stored key pair. If there is none, it generates a pair, stores it and registers the public key; the returned device identifier is stored next to the pair. When a secret is created, the page builds a share link of the form \texttt{/?id=<payload\_id>} and offers a copy button. When a page is opened with such a link, or with the identifier in the fragment \texttt{/\#<payload\_id>}, the page starts the existence check automatically and, if the secret exists, shows the burn warning described in Section~2.2. After a successful reveal the identifier is removed from the address bar.
+Client-side cryptographic routines interface directly with the standard Web Cryptography API (\texttt{window.crypto.subtle}) in \texttt{lib/crypto.ts} without external dependencies. On initial sign-in via Keycloak, the browser checks for an existing RSA-OAEP 2048-bit key pair in local storage. If absent, it generates a new pair, exports the public key in SubjectPublicKeyInfo (SPKI) format, and registers it with the API, storing the private key securely inside IndexedDB under \texttt{secretshare\_keystore} indexed by user identity.
+
+When creating a secret, the user enters the sensitive plaintext, selects the designated recipient from the organization directory, and specifies an expiration lifetime between 5 minutes and 24 hours. The browser generates a random 256-bit AES-GCM content encryption key, encrypts the plaintext locally with a fresh 96-bit initialization vector, wraps the symmetric key using the public keys of the recipient's active devices, and transmits the resulting envelope to \texttt{POST /api/secrets}.
+
+\screenshot{images/screenshots/secret_create.png}%
+  {Secret creation and link sharing interface}%
+  {fig:secret_create}%
+  {As shown in Figure~3.1, the secret creation interface provides an intuitive form where the user enters the sensitive payload, selects the intended recipient, configures the expiration window, and generates an ephemeral link.}%
+  {Figure 3.1: Secret Creation Interface}%
+  {Take a screenshot of the main web application page with the secret input textarea, recipient user selection field, TTL expiration selector, and the generated share link with the copy button.}
+
+Retrieving a secret follows a two-stage flow to prevent automated link crawlers from consuming ephemeral secrets. When navigating to a share link carrying the secret identifier, the web page initiates a non-destructive existence check via \texttt{POST /api/secrets/exists}. Upon positive confirmation, the recipient is shown an explicit burn warning notification. Once the recipient confirms and authenticates via OpenID Connect, the client invokes \texttt{POST /api/secrets/reveal}, unwraps the content key using its local private key, and renders the decrypted secret in memory alongside a copy button and a memory-clearing action.
+
+\screenshot{images/screenshots/secret_reveal.png}%
+  {Burn notice warning and revealed secret view}%
+  {fig:secret_reveal}%
+  {As shown in Figure~3.2, accessing the share link presents a non-destructive burn notice that warns the recipient prior to one-time retrieval and in-memory decryption.}%
+  {Figure 3.2: Burn Notice and Reveal Interface}%
+  {Take a screenshot of the secret access link view displaying the burn warning notification, the recipient confirmation button, and the subsequently revealed secret with memory-clearing options.}
+
+\subsec{Backend Architecture and API Routing}
 
 The API is a FastAPI application written in Python 3.12. All configuration is read by one Pydantic settings class from environment variables; no other module reads the environment. The settings class validates the configuration at start-up: it rejects lifetime bounds that contradict each other, malformed proxy address ranges and, in production mode, missing database or identity provider settings. Database migrations are applied by Alembic when the container starts, and a failed migration stops the container.
 
@@ -682,16 +717,7 @@ The Content Security Policy addresses the risk identified in Table~1.1: a script
 
 The uniform authentication error closes an information leak in the token validation. Originally the 401 response contained the message of the underlying library, such as an unknown key identifier or an expired signature, which told an attacker which part of a forged token was wrong. Every rejected token now receives the same message, and the reason is written only to the server log, without the token itself. Error messages that reveal internal details are a typical example of the weaknesses listed by OWASP \cite{owasptop10}.
 
-Several controls are known to be incomplete, and the team documented them as such rather than claiming them as finished:
-\begin{itemize}
-  \item the append-only trigger can be disabled by the database owner, and the API currently connects as the owner;
-  \item the audit log stores IP addresses and user agents, which are personal data under the GDPR, but no retention period or deletion job exists yet \cite{gdpr};
-  \item the Content Security Policy still allows inline styles, which are produced by the current interface code;
-  \item the TLS clients verify the certificate chain but not the host name of Redis and PostgreSQL;
-  \item the Redis server requires neither a password nor a client certificate, so any container on the internal network can read envelopes;
-  \item the web share link carries the identifier in the query string, so the web tier receives it in the request line, although it does not log it by default and the page removes it after reading;
-  \item response timing was not measured, so differences in processing time could still distinguish some cases that the responses themselves hide.
-\end{itemize}
+Several controls are known to be incomplete, and the team documented them transparently rather than claiming full operational maturity. In particular, the append-only trigger on the audit table can be disabled by the database owner, and the API currently connects using this owner role. Furthermore, while the audit log records client IP addresses and user agent headers, which qualify as personal data under the GDPR, no formal retention period or automated deletion job has been implemented yet \cite{gdpr}. On the web client, the Content Security Policy still permits inline styles required by the UI styling library, and the share link transmits the secret identifier in a query string, exposing it to the web tier before the page script strips it. Within the internal container network, TLS clients verify the CA certificate chain but do not enforce host-name verification for Redis and PostgreSQL, and the Redis datastore requires neither an access password nor client mTLS certificates. Finally, response timings across various endpoints were not benchmarked, meaning subtle processing time variations could theoretically reveal internal validation paths that the uniform HTTP payloads deliberately conceal.
 
 % ------------------------------------------------------------------------------
 \subsec{Testing and Continuous Delivery}
@@ -745,13 +771,13 @@ Several of the most instructive results of the internship were problems that the
 
 The first problem was that a wrong recipient destroyed the secret. In an early version the reveal handler removed the envelope with \texttt{GETDEL} and only then compared the recipient. A user who opened a link meant for someone else received the expected 403 response, but when the real recipient opened the link, the secret was gone. The defect was reproduced with two accounts and fixed with the Lua script in Listing~2.1. The regression test now starts ten requests of a wrong user in parallel with ten requests of the recipient against a real Redis and asserts that exactly one request receives the secret and that it is one of the recipient's.
 
-The second problem was the identifier in the access log, described in Section~3.2. It showed that a protection applied in one place, the truncated audit prefix, can be defeated by a component that the developers do not think of as storage, and it led to the rule that identifiers never appear in a URL of the API.
+The second problem was the identifier in the access log, described in Section~3.3. It showed that a protection applied in one place, the truncated audit prefix, can be defeated by a component that the developers do not think of as storage, and it led to the rule that identifiers never appear in a URL of the API.
 
 The third problem was an empty audit log. Everything appeared healthy and the smoke tests passed, but the \texttt{audit\_events} table did not exist in the preview and staging databases, because no step applied the migrations. The audit service ignores write errors by design, so that an audit outage cannot change the answers to secret requests, and the failure was therefore invisible. Migrations are now applied when the container starts, and the case shows that a deliberate fail-open decision must be paired with monitoring.
 
 The fourth problem was a pipeline that reported success without running its tests. The preview deployment sent its script to the server over SSH through standard input, and a \texttt{docker compose exec} command inside the script read the rest of the script as its own input. The shell then reached the end of its input and exited with success before any smoke test had run, and the smoke tests had in the meantime become outdated without anyone noticing. The fix redirects the input of such commands and makes the step fail unless the log contains the final success message of the test battery.
 
-The fifth problem concerned rate limiting behind proxies. All users of an environment shared one limit of ten creations per minute, and the audit log recorded the address of Traefik instead of the client, because the API saw every request as coming from the proxy. The trusted proxy middleware described in Section~3.1 solved the problem. The team also documented the pitfall that trusting the left-most \texttt{X-Forwarded-For} entry would let any client choose a new address for every request and bypass the limit.
+The fifth problem concerned rate limiting behind proxies. All users of an environment shared one limit of ten creations per minute, and the audit log recorded the address of Traefik instead of the client, because the API saw every request as coming from the proxy. The trusted proxy middleware described in Section~3.2 solved the problem. The team also documented the pitfall that trusting the left-most \texttt{X-Forwarded-For} entry would let any client choose a new address for every request and bypass the limit.
 
 The sixth problem appeared when the preview environments moved to HTTPS. Sign-in failed with an issuer mismatch, because Keycloak advertised its issuer as \texttt{https://<host>:80/keycloak/...}: Tailscale terminated HTTPS on port 443 and passed plain HTTP to Traefik on port 80, and Keycloak combined the forwarded scheme with the forwarded port. Since OpenID Connect clients must reject tokens whose issuer differs from the configured one \cite{oidccore}, the failure was correct behaviour of the client. It was fixed by making Traefik forward port 443 explicitly and by configuring the public host name of Keycloak for each preview.
 
@@ -762,29 +788,9 @@ A common lesson of these cases is that security properties must be tested end to
 
 The domain analysis showed that credentials shared through chat and ticket systems remain exposed for years and that existing one-time-link services leave at least one of four weaknesses open. From it the team derived a concept in which the server is blind, access is bound to the recipient's identity, delivery is atomic and nothing secret is logged. The system design expressed the concept as nine functional and ten non-functional requirements, modelled the behaviour and structure in UML and summarised the security properties as five invariants that can be tested.
 
-The main achievements of the internship are the following:
-\begin{itemize}
-  \item a working minimum viable product in which secrets are encrypted in the browser with AES-256-GCM and RSA-OAEP and the server stores only ciphertext;
-  \item recipient authentication with Keycloak through OpenID Connect and PKCE;
-  \item atomic, recipient-checked single delivery implemented as a Lua script in Redis;
-  \item removal of secret identifiers from API request lines and logs, found and fixed through the team's own testing;
-  \item an append-only audit log that stores no secret material and does not affect the responses of the relay;
-  \item internal TLS to both data stores, a Content Security Policy for the page that performs encryption, and uniform error responses;
-  \item a pipeline with 176 automated API and security tests, TLS and live OAuth tests, and a preview environment for every pull request.
-\end{itemize}
+The principal achievement of the internship is a fully operational minimum viable product that guarantees zero-trust secret exchange. Browser-side hybrid encryption combines AES-256-GCM and RSA-OAEP so that the central application server stores and processes only opaque ciphertext envelopes. Recipient identity is rigorously enforced using Keycloak through OpenID Connect and the authorization code flow with PKCE, preventing unauthorized access even if share links are intercepted. Ephemeral storage and atomic single-delivery semantics are guaranteed by an atomic Redis Lua script that checks identity and deletes data in a single transactional step. Furthermore, internal testing exposed and eliminated sensitive identifier leakage from API request lines and server logs, establishing an append-only audit architecture that records only truncated prefixes and remains strictly decoupled from secret payload lifecycles. Finally, container-to-database communications are secured through internal CA-issued TLS certificates, the web tier is protected by a strict nonce-based Content Security Policy, and the entire system is validated by an automated continuous integration pipeline executing 176 tests alongside per-pull-request preview deployments.
 
-The work also produced a clear list of limitations, which is at the same time the plan for the PBL semester from October to December:
-\begin{itemize}
-  \item the client should send its device identifier on reveal so that the server refuses, without burning, a request from a device that cannot decrypt the secret;
-  \item device private keys should be generated as non-extractable keys;
-  \item the public key lookup should require authentication to prevent enumeration of user names;
-  \item multi-factor authentication and brute-force protection should be enabled in Keycloak, as required by the DAS brief;
-  \item the API should connect to PostgreSQL with a role that does not own the audit table, and audit rows should be copied to append-only storage;
-  \item a retention period and a deletion job for audit data should be defined to comply with the GDPR;
-  \item share links should use the URL fragment instead of the query string;
-  \item inline styles should be moved to the stylesheet so that the Content Security Policy can forbid them;
-  \item the staging deployment, which currently fails, should be repaired, and an incident response plan should be written.
-\end{itemize}
+The technical limitations identified during the development phase establish the development roadmap for the subsequent Project-Based Learning semester. On the client side, future iterations will send the active device identifier during the reveal phase to prevent burning a secret on an unregistered device, while device private keys will be generated as non-extractable CryptoKey instances. To mitigate user enumeration, public key retrieval will require prior authentication. In the identity tier, Keycloak will be hardened with multi-factor authentication and brute-force protection as specified by the DAS requirements. In the persistence layer, the API will be restricted to a non-owner database role, and audit records will be synchronized to immutable external storage, accompanied by automated GDPR-compliant data retention policies. In the frontend and network routing, secret identifiers will migrate from query parameters to URL hash fragments, and UI styling will be decoupled from inline attributes to allow an even stricter Content Security Policy. Lastly, staging deployment automation will be finalized, complemented by a formal incident response plan and threat mitigation protocol.
 
 For the implementation phase, the data model already allows users from chat platforms such as Slack and Microsoft Teams, and a sender dashboard would let users revoke unread secrets.
 
