@@ -312,7 +312,6 @@ The minimum viable product was built by a team of five students during a four-we
 \pagestyle{fancy}
 
 \unnumberedsection{INTRODUCTION}
-\enlargethispage{2\baselineskip}
 
 Software teams exchange credentials every day: a developer needs a database password during onboarding, an operator shares a temporary cloud token during an incident, and a contractor receives an API key for an integration. In practice these values are usually pasted into the tools the team already uses. The GitGuardian report on secrets sprawl found leaked secrets in 2.4\% of the corporate Slack channels and 6.1\% of the Jira tickets that it analysed \cite{gitguardian2025}. Such messages are kept for years, copied into backups and indexed for search, so one compromised account exposes a history of credentials. Stolen credentials matter because credential abuse remains the leading initial access vector \cite{verizon2025}, as evidenced by the 2022 Uber incident \cite{uber2022} and Operation Emerald Whale \cite{emeraldwhale2024}.
 
@@ -320,9 +319,7 @@ One-time secret links were created to shorten this exposure: a secret is stored 
 
 The project was carried out as part of the Development of Secure Applications (DAS) internship, whose brief asks teams to build a realistic minimum viable product in which security is designed in from the start: encryption of data in transit and at rest, OAuth~2.0 for API access, input validation, error handling that does not disclose information, and documentation of threats, risks and incident response \cite{dasbrief}. A one-time secret relay suits this brief well because every one of its functions is security-relevant, and because its correctness can be expressed as a small number of verifiable invariants.
 
-The purpose of the project is to design and implement SecretShare, a relay in which the server can neither read a secret nor hand it to anyone except the named recipient, and to verify these properties with automated tests. To achieve this purpose, several concrete engineering objectives were established and executed. First, the team analysed the problem domain, identifying active threat actors and evaluating the operational weaknesses of existing secret-sharing tools. Second, functional and non-functional requirements were specified, with particular emphasis on formulating measurable security invariants. Third, the system behaviour and structural architecture were modelled using standard UML diagrams. Fourth, the core software was developed to implement browser-side hybrid encryption, recipient authentication and atomic single delivery in Redis. Fifth, the security controls and error-handling behaviours were systematically verified through automated tests and continuous integration workflows. Finally, the remaining architectural limitations were documented alongside a structured project plan for the subsequent PBL semester.
-
-For developers, operators and security staff the expected impact is that a shared credential lives for minutes in an encrypted store instead of years in a chat history.
+The purpose of the project is to design, implement, and verify SecretShare, a relay in which the server can neither read a secret nor deliver it to anyone except the intended recipient. To achieve this, key engineering objectives were executed: domain analysis and threat modeling against real-world breach vectors; formal specification of functional requirements and measurable security invariants; structural and behavioral modeling using standard UML diagrams; implementation of browser-side hybrid encryption, recipient authentication, and atomic Lua single delivery in Redis; and systematic security verification via automated test suites and continuous delivery workflows. For engineering teams, the resulting operational impact is that shared credentials persist ephemerally in encrypted memory rather than permanently in searchable chat logs.
 
 The work was done by a team of five students during the September 2026 internship; the repository was created on 9 September. Changes went through pull requests on GitHub, and by the time of writing 28 pull requests had been merged, each of them tested automatically and, from the middle of the month, deployed to its own preview environment \cite{secretsharerepo}.
 
@@ -437,17 +434,16 @@ Following the DAS brief \cite{dasbrief}, the team implemented in September the m
 
 % ------------------------------------------------------------------------------
 \subsec{Market Research}
-\enlargethispage{2\baselineskip}
 
-The concept was compared with four tools whose design is documented by their authors, so that the comparison relies on primary sources.
+The concept was evaluated against four representative tools documented in primary literature.
 
-HashiCorp Vault is a secrets management system for machines and services. Its response wrapping feature places a secret behind a single-use token with a limited lifetime, which can be passed to another party \cite{vaultwrap}. The mechanism is strong, but it assumes that both parties use Vault, which is disproportionate for an occasional handover between two people.
+HashiCorp Vault provides response wrapping to encapsulate secrets behind single-use, time-limited tokens \cite{vaultwrap}. While cryptographically robust, it requires both parties to share Vault infrastructure, creating excessive operational overhead for ad-hoc credential exchanges between individuals.
 
-Bitwarden Send is part of the Bitwarden password manager. Content is encrypted when a Send is created and decrypted when the recipient opens the link; a Send can be limited by the number of accesses, can carry an optional password, and has a lifetime of at most 31 days \cite{bitwardensend}. Recipients do not need an account, which is convenient but means that, without the optional password or e-mail verification, the link alone grants access.
+Bitwarden Send provides client-side encryption with configurable access counts and optional passwords \cite{bitwardensend}. However, because recipients require no identity enrollment, the retrieval link itself functions as the sole credential unless secondary verification channels are configured.
 
-Yopass is an open-source service that encrypts the secret in the browser with OpenPGP and places the decryption key in the URL fragment, so that the server never receives it; secrets can be deleted after the first retrieval \cite{yopass}. The open-source version has no user accounts, so the link is again the only credential, while OpenID Connect authentication is offered in a commercial edition.
+Yopass encrypts payloads in-browser using OpenPGP with the decryption key stored in the URL fragment \cite{yopass}. While server-blind, the open-source version lacks user identity gating, releasing secrets to any agent presenting the link.
 
-Onetime Secret is a widely used public service whose secrets, according to its own description, are encrypted on its servers, optionally with a sender's passphrase, and deleted after one display \cite{onetimesecret}.
+Onetime Secret executes encryption server-side by default and deletes data upon initial display \cite{onetimesecret}, exposing unencrypted credentials to hosting infrastructure and access log inspection.
 
 \begin{table}[H]
 \leadin{As shown in Table~1.4, each existing tool covers part of the problem, but none of the open-source tools combines browser-side encryption with a check of the recipient's identity before a secret is released.}
