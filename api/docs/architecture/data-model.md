@@ -12,13 +12,13 @@ is deliberately left empty in `alembic.ini`.
 
 ### `users`
 
-Identity of a person on a chat platform.
+Identity of a person, created on the first device key registration.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `uuid` pk | |
-| `platform` | `text` | `'slack'` or `'teams'`, enforced by CHECK |
-| `platform_user_id` | `text` | unique together with `platform` |
+| `platform` | `text` | `'slack'`, `'teams'`, `'keycloak'` or `'web'`, enforced by CHECK; the web client registers with `'web'` |
+| `platform_user_id` | `text` | Keycloak `preferred_username` (or `sub` when absent); unique together with `platform` |
 | `workspace_id` | `text` null | multi-tenant ready, single workspace in September |
 | `created_at` | `timestamptz` | `now()` |
 
@@ -30,14 +30,17 @@ One row per enrolled browser. **Public keys only.**
 |---|---|---|
 | `id` | `uuid` pk | |
 | `user_id` | `uuid` fk → `users` | `ON DELETE CASCADE` |
-| `public_key` | `text` | SPKI DER, base64 |
+| `platform` | `text` | same values and CHECK as `users.platform`; default `'web'` |
+| `public_key` | `text` | SPKI PEM, RSA-OAEP 2048 (see `crypto-spec.md`) |
 | `label` | `text` null | e.g. `'Chrome on Windows'` |
 | `created_at` | `timestamptz` | `now()` |
 | `revoked_at` | `timestamptz` null | null means active |
 
-Table exists from the first migration because `audit_events.actor_user_id`
-references `users`. The key-registration endpoints are Step 3 work and are not
-implemented yet.
+`POST /keys/register` writes this table for the identity in the caller's access
+token. In the same transaction it sets `revoked_at` on the user's active keys of
+the same platform, so each user has at most one active key per platform.
+`GET /keys/{user_id}` returns the active keys; it is unauthenticated (R-06 in
+`api/docs/security/risk-register.md`).
 
 ### `audit_events`
 
@@ -76,12 +79,25 @@ A `BEFORE UPDATE OR DELETE` trigger raises an exception on `audit_events`. A pla
 and an owner cannot revoke its own implicit rights.
 
 **Known gap:** a superuser can still disable or drop the trigger. Closing it
-requires running the API as a dedicated non-owner, non-superuser role. See
-`docs/security/security-controls.md`.
+requires running the API as a dedicated non-owner, non-superuser role. See AUD-3 in
+`api/docs/security/security-controls.md` and R-09 in
+`api/docs/security/risk-register.md`.
+
+## Database roles
+
+The API, Keycloak and the `keycloak-db-init` job connect with the same PostgreSQL
+superuser (`POSTGRES_USER`). The Keycloak database runs on the same server. A
+compromise of the API credentials therefore also exposes Keycloak's accounts and
+credential hashes. Separate least-privilege roles are planned (R-09).
 
 ## Retention
 
 `ip` and `user_agent` are personal data under GDPR. No automated retention job
 exists yet; rows accumulate indefinitely. A retention policy and a deletion job are
 required before any real-user deployment and are tracked as a limitation, not a
-completed control.
+completed control (AUD-5, R-19).
+
+## Backup
+
+No backup job exists for either database (R-18). Redis is excluded from backups by
+design: it holds only envelopes with a TTL and runs without persistence.

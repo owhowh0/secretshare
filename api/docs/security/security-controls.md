@@ -3,6 +3,33 @@
 Each row states the security problem, why it matters for SecretShare specifically,
 how it is implemented, how it was tested, and what it does **not** cover.
 
+Web application controls (WEB-x) are documented in `docs/security/security-controls.md`.
+Requirement, threat and risk identifiers refer to `security-requirements.md`,
+`threat-model.md` and `risk-register.md` in this directory.
+
+| ID | Control | Requirement |
+|---|---|---|
+| AUD-1 | Security events recorded in an audit log | SR-25 |
+| AUD-2 | Audit log holds no secret material | SR-23 |
+| AUD-3 | Append-only audit table | SR-25 |
+| AUD-4 | Audit failures do not change responses | SR-09 |
+| AUD-5 | Limited personal data in audit records | SR-27 |
+| AUD-6 | Payload id removed from the access log | SR-23 |
+| AUTH-1 | Uniform token rejection message | SR-09 |
+| AUTH-2 | Access token verification | SR-03, SR-08 |
+| AUTH-3 | Reveal bound to the recipient's identity | SR-19 |
+| SEC-1 | Atomic, recipient-checked burn | SR-19, SR-20 |
+| SEC-2 | Bounded lifetime and non-persistent store | SR-22 |
+| SEC-3 | Unguessable payload identifiers | SR-21 |
+| SEC-4 | Uniform response for unknown, burned and expired secrets | SR-09 |
+| API-1 | Request body size limit | SR-07 |
+| API-2 | Schema validation without input echo | SR-07, SR-09 |
+| API-3 | Rate limiting | SR-24 |
+| API-4 | Client address resolution behind proxies | SR-24 |
+| API-5 | API response security headers | SR-28 |
+| TLS-1 | TLS between the API and the data stores | SR-02 |
+| DB-1 | Parameterised data access | SR-13 |
+
 ---
 
 ## Audit logging
@@ -84,11 +111,144 @@ how it is implemented, how it was tested, and what it does **not** cover.
 | **How tested** | `tests/security/test_auth_error_disclosure.py` — six distinct failure modes (expired, wrong audience, unknown kid, malformed, empty segments, tampered signature) are asserted to produce **byte-identical** response bodies, not merely equal status codes. A parametrised test asserts no PyJWT vocabulary (`signing key`, `kid`, `audience`, `signature`, `algorithm`, `PyJWK`, `Unable to find`) appears anywhere in any response. Two tests assert the reason *is* present in the server log via `caplog`, so the fix suppresses disclosure without destroying operator diagnostics, and one asserts the bearer token — and separately its signature segment — never reaches the log at any level. 13 tests, all passing. |
 | **Limitations** | **Timing is not addressed and remains a potential oracle.** Measured over 30 requests per case against the test client, an expired token and an unknown `kid` were indistinguishable (median 2.11 ms vs 2.05 ms) — but only because the test JWKS is pre-cached in memory. In production an unrecognised `kid` can miss `PyJWKClient`'s cache and trigger a network fetch from Keycloak, which would make that path far slower than a locally-detected expiry and reintroduce the distinction the constant body removes. This has not been measured against a live Keycloak, so the control is verified for response *content* only. Closing it requires constant-time handling of the whole validation path and was explicitly out of scope here. The 503 for an unreachable Keycloak is also still distinguishable from a 401, which tells a prober about infrastructure state rather than about their token. Log volume is a second-order concern: a token-guessing attack now writes one WARNING per attempt, which is useful for detection but unbounded, and rate limiting rather than this control is what should bound it. |
 
+### AUTH-2 — Access token verification
+
+| | |
+|---|---|
+| **Security problem** | An API that accepts a token without checking its signature, algorithm, audience and expiry accepts forged tokens, tokens issued for another client, and tokens that have expired. Accepting `alg: none` or letting the token choose between RS256 and HS256 allows a forger to sign with the public key. |
+| **Relevance** | The caller's identity decides who may reveal a secret (AUTH-3) and for whom a device key is registered. A forged identity on `POST /keys/register` would register an attacker's public key for the victim, so later secrets addressed to the victim would be wrapped for the attacker. |
+| **Implementation** | `app/core/auth.py::get_current_user`, used as a FastAPI dependency. `HTTPBearer` extracts the token; a missing header returns 403. `PyJWKClient` fetches the realm key set from `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs` and caches it for 3600 seconds; the key is selected by the token's `kid`. `jwt.decode` is called with the fixed list `algorithms=["RS256"]` and `audience=KEYCLOAK_CLIENT_ID`; PyJWT verifies `exp` when present. The audience claim is added by the `secretshare-api-audience` mapper in `keycloak/realm-export.json`. The caller identity is `preferred_username`, or `sub` when that claim is absent. An unreachable key set returns 503. |
+| **How tested** | `tests/test_api.py::TestMeEndpoint` — valid token accepted; missing token 403; expired token, wrong audience, unknown `kid` and a malformed token each 401; unreachable Keycloak 503. `tests/test_keys.py::test_register_without_token_fails_403`. `tests/test_oauth_integration.py` obtains real tokens from Keycloak and calls the API; it runs in the `oauth-integration` job of `test-api.yml` against the full compose stack. |
+| **Limitations** | **The issuer is not verified**: `jwt.decode` receives no `issuer`, although the key set is realm-specific, which limits the practical effect (R-16). `exp`, `iat` and `nbf` are verified only when present, not required. Tokens are not introspected, so a token remains valid until it expires after the user is disabled or signs out (5 minutes, the realm default). The key set is fetched over HTTP on the internal network (R-13). A rename in Keycloak changes `preferred_username` and orphans the user's secrets and device keys. |
+
+### AUTH-3 — Reveal bound to the recipient's identity
+
+| | |
+|---|---|
+| **Security problem** | When the identifier of an object is enough to retrieve it, anyone who obtains the identifier obtains the object (insecure direct object reference). |
+| **Relevance** | A share link travels through chat and mail. It is seen by link previewers, forwarded, pasted into the wrong channel, and kept in clipboard histories. If the link were the only credential, each of those copies could read the secret. |
+| **Implementation** | `POST /secrets/reveal` (`app/api/routes/secrets.py::reveal_secret`) depends on `get_current_user` (AUTH-2). The caller identity is passed to `SecretService.retrieve_secret`, which compares it with the envelope's `recipient_id` inside the atomic burn (SEC-1). A mismatch returns 403 with a constant message, records a `denied` audit event and leaves the secret stored. A token without `preferred_username` or `sub` returns 400. |
+| **How tested** | `tests/test_secrets.py::test_retrieve_secret_unauthorized_recipient` and `TestDeniedRevealKeepsSecret` — a denied attempt returns 403, repeated denials never delete the secret, and the recipient can still reveal it afterwards. `tests/security/test_secrets_invariants.py::TestDeniedRevealIsNonDestructive::test_route_denies_then_serves_recipient` runs the same sequence against a real Redis. The preview smoke test (`.github/scripts/test_secret_lifecycle.sh`) addresses a secret to a non-existent user and verifies that `testuser` receives 403. |
+| **Limitations** | A signed-in non-recipient learns from the 403 that the secret exists; this is accepted, because `POST /secrets/exists` answers the same question. The binding compares user name strings; it is not bound cryptographically to the ciphertext. Only reveal is authorised: `POST /secrets`, `POST /secrets/exists` and `GET /keys/{user_id}` accept anonymous calls (R-06, R-07). The realm has only one test user, so the smoke test cannot yet exercise a denial by a real second account. |
+
 ---
 
-## Notes on scope
+## Secret lifecycle
 
-Controls for atomic burn, TTL purge, ciphertext-only relay, CSPRNG payload IDs,
-timing-safe 404, and Redis persistence disabled are required by CLAUDE.md §11.9 and
-are **not yet written up here**. They belong to the Step 1 and Step 5 work and
-should be added as rows in this same format.
+### SEC-1 — Atomic, recipient-checked burn
+
+| | |
+|---|---|
+| **Security problem** | Burn-after-read built from separate read and delete steps has two failure modes. Reading, checking and then deleting lets two concurrent requests both read the secret before either deletes it. Deleting first and checking afterwards destroys the secret when the wrong person asks for it. |
+| **Relevance** | Single delivery is the product's core guarantee (invariant 3). The second failure mode existed in the project: an earlier handler used `GETDEL` before comparing the recipient, so a wrong recipient received 403 and the real recipient then found the secret gone. It was fixed in PR #26. |
+| **Implementation** | `app/storage/redis_store.py::SecretStore.burn_for_recipient` runs one Lua script with `EVAL`. The script reads `s:<payload_id>`, decodes it with `pcall(cjson.decode, …)`, compares `recipient_id` with the caller identity passed in `ARGV[1]`, and deletes the key only on a match. It returns `missing`, `denied` or `burned`. Redis runs a script without interleaving other commands, so the three steps form one operation. The payload id and the identity are passed as `KEYS` and `ARGV`, never concatenated into the script. A payload that is not a JSON object with a matching recipient is never deleted by this path. |
+| **How tested** | `tests/security/test_secrets_invariants.py`, against a real Redis: `TestAtomicBurn::test_burn_is_single_delivery` (20 concurrent reveals by the recipient, repeated 5 times; exactly one succeeds each time) and `test_second_read_is_a_miss`; `TestDeniedRevealIsNonDestructive::test_denied_reveal_leaves_key_and_ttl`, `test_concurrent_intruders_cannot_starve_the_recipient` (10 wrong-user requests race 10 recipient requests; exactly one recipient request receives the secret), `test_unparseable_payload_is_never_deleted`. CI sets `TEST_REDIS_URL` and fails the job if any security test is skipped. `tests/fakes.py::InMemorySecretStore` mirrors the script for unit tests. |
+| **Limitations** | The server deletes the envelope before the browser attempts decryption. A reveal on a browser without a matching device key destroys a secret that can no longer be read (R-05). The guarantee assumes a single Redis primary; replication to replicas is asynchronous and is not used. |
+
+### SEC-2 — Bounded lifetime and non-persistent store
+
+| | |
+|---|---|
+| **Security problem** | A secret that is never read would otherwise remain stored indefinitely. A store that writes snapshots or an append-only file to disk leaves copies of envelopes in volumes and backups after the secret has been read. |
+| **Relevance** | The purpose of the relay is to shorten the lifetime of a shared credential. An unread secret addressed to a contractor who never opens it must disappear without manual action, and no copy may survive in a disk image. |
+| **Implementation** | `SecretStore.put` writes with `SET … EX <ttl>`. The lifetime defaults to `SECRET_TTL_SECONDS` (600) and must lie within `SECRET_TTL_MIN_SECONDS` (300) and `SECRET_TTL_MAX_SECONDS` (86400). The bounds are checked three times: `Settings` refuses to start when the default lies outside them; the request schema rejects an out-of-range `ttl_seconds` with 422; `SecretService.create_secret` checks again against the live settings. Redis runs with `--save "" --appendonly no` in `docker-compose.yml` and `docker-compose.preview.yml`, so it writes neither RDB snapshots nor an AOF. |
+| **How tested** | `tests/security/test_secrets_invariants.py::TestTtl` — the TTL is set on the Redis key, a requested TTL reaches Redis, and a TTL above the maximum never reaches Redis. `tests/test_secrets.py::TestTtl` — default, explicit `null`, custom value, `expires_at` and out-of-range rejection. `tests/test_config.py::TestTtlBounds` — invalid bounds stop startup. |
+| **Limitations** | No test inspects the running Redis configuration (`CONFIG GET save`); the setting exists only on the compose command line. Expiry is silent, so no `expired` audit event is recorded (AUD-1). A restart of Redis deletes all unread secrets, which is the accepted cost of not persisting them. Redis has no `maxmemory` ceiling (R-21). |
+
+### SEC-3 — Unguessable payload identifiers
+
+| | |
+|---|---|
+| **Security problem** | Sequential or weakly random identifiers can be guessed or enumerated. |
+| **Relevance** | The identifier locates a secret and is carried in the share link. A guessable identifier would let an attacker probe for existing secrets and target them. |
+| **Implementation** | `app/core/ids.py::new_payload_id` returns `secrets.token_urlsafe(32)`: 32 bytes from the operating system's CSPRNG, encoded as 43 base64url characters. It is the only source of payload identifiers (invariant 4). With N stored secrets and q guesses, the probability of a hit is at most N·q / 2²⁵⁶. |
+| **How tested** | `tests/security/test_secrets_invariants.py::TestPayloadIds::test_payload_id_entropy` — 10 000 identifiers, no collision, each at least 43 characters. |
+| **Limitations** | The test checks uniqueness and length, not the randomness source; the source is enforced by code review of `core/ids.py`. Identifier strength does not help once an identifier is disclosed (R-04); AUTH-3 limits what a holder can do with it. |
+
+### SEC-4 — Uniform response for unknown, burned and expired secrets
+
+| | |
+|---|---|
+| **Security problem** | Distinct responses for "never existed", "already read" and "expired" tell a prober which identifiers once held a secret and whether it was read. |
+| **Relevance** | Invariant 5. A sender or an attacker must not learn from the API whether a recipient already read a secret, and a guessed identifier must not be confirmable as historical. |
+| **Implementation** | The burn script returns `missing` for all three cases, because Redis does not distinguish an expired key from an absent one. `SecretService` raises one `SecretNotFoundError`; `app/api/errors.py` maps it to 404 with the constant body `Secret not found or already retrieved`. There is no expired error type. `POST /secrets/exists` returns `{"exists": false}` for all three cases. Audit failures are swallowed so that they cannot change the response (AUD-4). |
+| **How tested** | `tests/security/test_secrets_invariants.py::TestNoEnumerationOracle::test_missing_and_burned_are_identical` — status, headers and body of a burned and an unknown id are compared. `tests/test_secrets.py::TestDomainExceptionHandlers::test_burned_and_unknown_are_indistinguishable` and `TestDeniedRevealKeepsSecret::test_burn_after_reveal_is_still_404_for_everyone`. `TestSecurityHeaders::test_headers_present_on_a_miss_too`. |
+| **Limitations** | Equality is verified for content, not for timing (R-22). A signed-in non-recipient receives 403 for a stored secret, which differs from 404 by design (AUTH-3). |
+
+---
+
+## API hardening
+
+### API-1 — Request body size limit
+
+| | |
+|---|---|
+| **Security problem** | Pydantic enforces field lengths only after the whole body has been read into memory. An unauthenticated client could make the API buffer an arbitrarily large request. |
+| **Relevance** | `POST /secrets` accepts anonymous requests. Without an early limit, a few large requests exhaust API memory, and oversized envelopes would reach Redis. |
+| **Implementation** | `app/core/limits.py::BodySizeLimitMiddleware`, a raw ASGI middleware placed outside every other layer except the proxy resolver. The limit is `MAX_PAYLOAD_BYTES` (65536) plus 1024 bytes for the JSON structure. A declared `Content-Length` above the limit is rejected with 413 before the body is read; an unparsable `Content-Length` returns 400. The body is also counted as it streams, so a chunked or understated request is cut off and answered with 413. `SecretCreateRequest` checks the ciphertext again in UTF-8 bytes, so a payload one byte over the limit returns a schema 422. |
+| **How tested** | `tests/security/test_secrets_invariants.py::TestPayloadSizeLimit` — a ciphertext of 65 537 bytes is rejected with 413 or 422 and nothing is written to Redis; a ciphertext of exactly 65 536 bytes is accepted. `tests/test_secrets.py::TestPayloadSize` — at limit, over limit, empty. |
+| **Limitations** | The tests exceed the schema limit by one byte and accept either status. **No test sends a body above the middleware limit or a chunked body**, so the 413 path of the middleware is verified by review only. The limit applies per request, not per client (see API-3). Traefik sets no body limit of its own. |
+
+### API-2 — Schema validation without input echo
+
+| | |
+|---|---|
+| **Security problem** | Unvalidated input reaches business logic and storage. Default validation errors in FastAPI repeat the rejected value in the response, which returns ciphertext or payload ids to whoever triggered the error and into any log that records response bodies. Unhandled exceptions can expose stack traces. |
+| **Relevance** | Brief §2 requires validation of all input and error handling that does not expose sensitive information. The rejected value on these endpoints is ciphertext or a payload id. |
+| **Implementation** | Every request body is a Pydantic model in `app/schemas/`: `recipient_id` 1–255 characters; `encrypted_keys` at least one item, each with a UUID `device_id`; `iv` at most 64 characters; `ciphertext` limited in UTF-8 bytes; `ttl_seconds` within bounds; `payload_id` 1–128 characters; `public_key` matched against an SPKI PEM pattern and limited to 4096 characters; `platform` from an allowlist; `label` at most 64 characters. `app/api/errors.py::_request_validation` returns only `type`, `loc`, `msg` and `ctx` for each error and drops `input`. `app/main.py::unhandled_exception_handler` returns a constant 500 body and logs the exception server-side. |
+| **How tested** | `tests/test_secrets.py::test_check_exists_validates_payload_id`, `TestTtl::test_ttl_out_of_bounds_is_rejected`, `TestPayloadSize::test_empty_payload_is_rejected`; `tests/test_keys.py::test_register_invalid_pem_fails_422`; `tests/test_api.py::TestErrorHandling::test_unhandled_exception_returns_500_without_leaking_traceback`. |
+| **Limitations** | **No test asserts that a 422 body omits the rejected input.** The API does not check that `iv`, `ciphertext` and `encrypted_aes_key` are valid base64 or that the IV has 12 bytes; this follows from invariant 1, and malformed envelopes fail only at decryption. The PEM pattern checks format, not key type or size. The 404 of `GET /keys/{user_id}` repeats the requested user name. |
+
+### API-3 — Rate limiting
+
+| | |
+|---|---|
+| **Security problem** | Without a request limit, a client can flood the store with envelopes, probe identifiers at high speed, or use the API to amplify load on Redis and PostgreSQL. |
+| **Relevance** | `POST /secrets` and `POST /secrets/exists` accept anonymous calls, and every create writes up to 64 KB to Redis memory. |
+| **Implementation** | `app/core/rate_limit.py::RateLimiter`, a FastAPI dependency implementing a fixed-window counter in Redis: `INCR rl:<scope>:<client ip>`, `EXPIRE` on the first request of the window, 429 with `Retry-After` set to the remaining window when the count exceeds the limit. `POST /secrets` uses scope `secrets:create` with `CREATE_RATE_LIMIT` (10 per 60 seconds). `POST /secrets/exists` and `POST /secrets/reveal` share scope `secrets:retrieve` with `RETRIEVE_RATE_LIMIT` (30 per 60 seconds). Limits are read from `Settings` on each request. The client address comes from API-4. |
+| **How tested** | `tests/test_config.py::TestRoutesUseSettings::test_create_rate_limit_comes_from_settings` and `test_retrieve_rate_limit_comes_from_settings` — the limit is enforced with the configured value. `tests/test_proxy.py::TestRateLimitPerRealClient` — separate buckets per client, and a forged `X-Forwarded-For` does not reset a bucket. |
+| **Limitations** | The limiter **allows requests when Redis fails**, logging `Rate limiting skipped` (R-21). A fixed window admits up to twice the limit across a window boundary. Limits are per IP address: clients behind one NAT share a bucket, and a distributed client is not limited. `GET /keys/{user_id}`, `POST /keys/register` and Keycloak logins are not limited (R-03, R-06). `INCR` and `EXPIRE` are separate commands; if `EXPIRE` fails after `INCR`, the counter has no expiry and the address stays limited until the key is deleted. |
+
+### API-4 — Client address resolution behind proxies
+
+| | |
+|---|---|
+| **Security problem** | Behind a reverse proxy the TCP peer is the proxy. Using it as the client address puts all users into one rate-limit bucket and records the proxy's address in the audit log. Trusting `X-Forwarded-For` from any peer, or taking its left-most entry, lets a client choose its own address. |
+| **Relevance** | Before PR #29 every caller in an environment shared the limit of 10 creations per minute, and audit rows held Traefik's address, which made both API-3 and the audit IP field ineffective. |
+| **Implementation** | `app/core/proxy.py::TrustedProxyMiddleware`, the outermost middleware. When the TCP peer lies in `TRUSTED_PROXIES`, it reads `X-Forwarded-For` from right to left and takes the first entry that is not a trusted proxy; entries further left are ignored. A malformed chain leaves the peer unchanged. `X-Forwarded-Proto` is applied under the same condition. Both compose files set `TRUSTED_PROXIES` to the private ranges `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`. Uvicorn runs with `--no-proxy-headers`. The preview Traefik runs with `forwardedHeaders.trustedIPs` for the same ranges so that it keeps the address set by the Tailscale sidecar. |
+| **How tested** | `tests/test_proxy.py` — `TestClientResolution` (trusted and untrusted peers, spoofed left-most entry, malformed chain, IPv6), `TestScheme`, `TestTrustedProxiesSetting` (an invalid CIDR stops startup), `TestRateLimitPerRealClient`, and `TestDeploymentWiring`, which asserts the compose files, the Dockerfile and the preview workflow carry the required settings. |
+| **Limitations** | All private ranges are trusted. The result is correct only while every hop in those ranges is a proxy that overwrites or appends `X-Forwarded-For` correctly; a client that reaches the API directly from a private network could supply its own header. The API port is not published, which prevents this in the current compose files. |
+
+### API-5 — API response security headers
+
+| | |
+|---|---|
+| **Security problem** | Responses without cache, framing and content-type directives can be stored by caches, rendered as HTML, or framed by another site. |
+| **Relevance** | A reveal response contains an envelope that must not outlive the burn in a browser or proxy cache. |
+| **Implementation** | `app/core/headers.py::SecurityHeadersMiddleware` sets on every response: `Cache-Control: no-store, no-cache, must-revalidate, private`, `Pragma: no-cache`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cross-Origin-Resource-Policy: same-origin`, `Cross-Origin-Opener-Policy: same-origin` and a restrictive `Permissions-Policy`. Headers are applied with `setdefault`, so a route can override one deliberately. Swagger UI paths receive a separate policy that allows its assets. CORS admits only the origins in `ALLOWED_ORIGINS`. |
+| **How tested** | `tests/test_api.py::TestSecurityHeaders` — strict policy on a normal route, relaxed policy on the documentation route. `tests/security/test_secrets_invariants.py::TestSecurityHeaders` — a reveal response is not cacheable, and headers are present on a 404. `tests/test_api.py::TestCORS`. |
+| **Limitations** | No HSTS; it belongs at the TLS edge (R-12). The documentation policy allows `'unsafe-inline'` scripts and `https://cdn.jsdelivr.net`, and Swagger UI is reachable in every environment. The documentation check matches any path containing `/docs`. |
+
+---
+
+## Transport and storage
+
+### TLS-1 — TLS between the API and the data stores
+
+| | |
+|---|---|
+| **Security problem** | Unencrypted connections to Redis and PostgreSQL expose envelopes, database credentials, device keys and audit data to anyone who can observe or modify traffic on the network between containers or hosts. |
+| **Relevance** | Brief §1 requires encryption in transit. The envelope is already encrypted, but the database password and the audit data are not. |
+| **Implementation** | The `tls-init` service runs `tls/generate.sh` once per `tls-certs` volume: an RSA 4096 certificate authority and RSA 4096 server certificates with `CN=db` and `CN=redis`, signed with SHA-256, valid for 3650 days; private keys mode 600. Redis listens only on its TLS port (`--tls-port 6379 --port 0`). PostgreSQL runs with `ssl=on`. The API connects to Redis with `rediss://`, `ssl_ca_certs` and `ssl_cert_reqs="required"`, and to PostgreSQL with an SSL context built from the same CA, including during Alembic migrations. Keycloak and the initialisation job connect to PostgreSQL with `sslmode=require`. Redis and PostgreSQL ports are published on `127.0.0.1` only. |
+| **How tested** | `tests/test_tls.py`, run by the `test-tls.yml` workflow: `TestTlsSettings`, `TestCreateEngineSSL` (SSL context present, certificate verification required), `TestRedisSSLContext` (verification required, invalid CA rejected), `TestGenerateScript` (files created, key modes 600, certificate subjects, issuer, idempotence). |
+| **Limitations** | **Host names are not verified**: the certificates carry no subject alternative name and both clients set `check_hostname` to false, so any certificate issued by the internal CA is accepted for either service. Keycloak's `sslmode=require` encrypts without verifying the certificate. PostgreSQL does not require TLS from clients. TLS is not mutual, and Redis has no password or ACL user (`--tls-auth-clients no`). The CA has no rotation procedure. Traffic from Traefik to the services and from the API to the Keycloak key set uses HTTP (R-13). |
+
+### DB-1 — Parameterised data access
+
+| | |
+|---|---|
+| **Security problem** | SQL built by string concatenation lets input change the query (SQL injection). The same applies to Redis scripts built from input. |
+| **Relevance** | `GET /keys/{user_id}` places a caller-supplied string into a database query without authentication; `POST /secrets/reveal` passes a caller-supplied payload id and identity to a Redis script. |
+| **Implementation** | All SQL is issued through SQLAlchemy 2.0 constructs (`select`, `update`, ORM inserts) in `app/services/keys.py` and `app/core/audit.py`; values are sent as bound parameters by the asyncpg driver. Migrations contain static DDL only. Redis keys are formed as `s:<payload_id>` and passed as command arguments; the burn script receives the key in `KEYS` and the identity in `ARGV`. |
+| **How tested** | Indirectly: `tests/test_keys.py::test_register_and_retrieve_keys_flow` and `tests/security/test_audit_db.py` exercise the queries. **No test submits injection payloads.** |
+| **Limitations** | Protection rests on the absence of raw SQL, which is enforced by review rather than by a linter or test. A future `text()` query with string formatting would not be detected automatically. |
