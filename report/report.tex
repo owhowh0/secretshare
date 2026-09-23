@@ -7,6 +7,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{mathptmx}
 \usepackage{setspace}
+\usepackage{indentfirst}
 \onehalfspacing
 
 % --- Paragraphs: justified, 1.25 cm first-line indent, no extra space ---
@@ -175,9 +176,6 @@
 % --- Bibliography: the heading comes from \unnumberedsection ---
 \patchcmd{\thebibliography}{\section*{\refname}}{}{}{}
 
-% Placeholder for data that only the team can supply (shown in red, per template).
-\newcommand{\todo}[1]{\textcolor{red}{#1}}
-
 \begin{document}
 
 % ==============================================================================
@@ -197,30 +195,29 @@
 \vspace{2.2cm}
 
 {\fontsize{14pt}{16pt}\selectfont\bfseries INTERNSHIP REPORT}\\[0.4cm]
-{\fontsize{13pt}{16pt}\selectfont\bfseries SECRETSHARE: ZERO-TRUST EPHEMERAL SECRET SHARING PLATFORM WITH END-TO-END HYBRID ENCRYPTION}\\[0.4cm]
-{\fontsize{12pt}{14pt}\selectfont\bfseries Team No.~\todo{[number]}}
+{\fontsize{13pt}{16pt}\selectfont\bfseries SECRETSHARE: ZERO-TRUST EPHEMERAL SECRET SHARING PLATFORM WITH END-TO-END HYBRID ENCRYPTION}
 
-\vspace{1.8cm}
+\vspace{2.2cm}
 
 \begin{flushleft}
-Team members:\\[0.2cm]
-{\singlespacing
-\begin{tabular}{p{0.20\textwidth} p{0.50\textwidth} p{0.22\textwidth}}
-Student 1: & Ilie Covali, \todo{[group]} & *Signature \\[0.25cm]
-Student 2: & Calin Poiata, \todo{[group]} & *Signature \\[0.25cm]
-Student 3: & Rustem Cimendur, \todo{[group]} & *Signature \\[0.25cm]
-Student 4: & Ionu\c{t} \c{S}oimu, FAF-221 & *Signature \\[0.25cm]
-Student 5: & \todo{[Name Surname (GitHub: nnorian)], [group]} & *Signature \\[0.6cm]
-Mentor: & \todo{[Name Surname, title]} & Signature \\
-\end{tabular}}
+{\bfseries Team members:}\\[0.3cm]
+{\singlespacing\renewcommand{\arraystretch}{1.45}%
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|p{0.26\textwidth}|}
+\hline
+Student 1: & Rustem Cimendur, FAF-243 & \\ \hline
+Student 2: & Ilie Covali, FAF-243 & \\ \hline
+Student 3: & Ecaterina Kushnirenko, FAF-243 & \\ \hline
+Student 4: & Calin Poiata, FAF-243 & \\ \hline
+Student 5: & Ionu\c{t} \c{S}oimu, FAF-243 & \\ \hline
+University Internship Mentor & Dominic Flocea & \\ \hline
+\end{tabularx}}
+
+\vspace{0.5cm}
+{\fontsize{10pt}{12pt}\selectfont\itshape
+*By signing the cover page of this report, each student confirms their active involvement in both the development of the project and the writing of the report. Students who did not contribute meaningfully are not permitted to sign.\par}
 \end{flushleft}
 
 \vfill
-
-\begin{flushleft}
-\fontsize{9pt}{11pt}\selectfont
-*By signing the cover page of this report, each student confirms their active involvement in both the development of the project and the writing of the report. Students who did not contribute meaningfully are not permitted to sign.
-\end{flushleft}
 
 \vspace{0.3cm}
 {\fontsize{11pt}{13pt}\selectfont Submission date: 23/09/2026}\\[0.2cm]
@@ -262,31 +259,26 @@ The minimum viable product was built by a team of five students during a four-we
 {\fontsize{11pt}{13.5pt}\selectfont\singlespacing
 \noindent
 \begin{tabular}{@{}P{0.10\textwidth} P{0.36\textwidth} @{\hspace{0.02\textwidth}} P{0.10\textwidth} P{0.36\textwidth}@{}}
-\textbf{AEAD} & Authenticated Encryption with Associated Data & \textbf{JWT} & JSON Web Token \\
-\textbf{AES} & Advanced Encryption Standard & \textbf{MFA} & Multi-Factor Authentication \\
-\textbf{API} & Application Programming Interface & \textbf{MVP} & Minimum Viable Product \\
-\textbf{ASGI} & Asynchronous Server Gateway Interface & \textbf{NIST} & National Institute of Standards and Technology \\
-\textbf{CA} & Certificate Authority & \textbf{OAEP} & Optimal Asymmetric Encryption Padding \\
-\textbf{CI} & Continuous Integration & \textbf{OIDC} & OpenID Connect \\
-\textbf{CSP} & Content Security Policy & \textbf{ORM} & Object-Relational Mapping \\
-\textbf{CSPRNG} & Cryptographically Secure Pseudo-Random Number Generator & \textbf{OWASP} & Open Worldwide Application Security Project \\
-\textbf{CSRF} & Cross-Site Request Forgery & \textbf{PBL} & Project-Based Learning \\
-\textbf{DAS} & Development of Secure Applications & \textbf{PEM} & Privacy-Enhanced Mail (text encoding of keys) \\
-\textbf{DBIR} & Data Breach Investigations Report & \textbf{PKCE} & Proof Key for Code Exchange \\
-\textbf{GCM} & Galois/Counter Mode & \textbf{PR} & Pull Request \\
-\textbf{GDPR} & General Data Protection Regulation & \textbf{RBAC} & Role-Based Access Control \\
-\textbf{HTTP} & Hypertext Transfer Protocol & \textbf{RFC} & Request for Comments \\
-\textbf{HTTPS} & HTTP over TLS & \textbf{RSA} & Rivest--Shamir--Adleman \\
-\textbf{IETF} & Internet Engineering Task Force & \textbf{SHA} & Secure Hash Algorithm \\
-\textbf{IP} & Internet Protocol & \textbf{SPKI} & Subject Public Key Info \\
+\textbf{AES} & Advanced Encryption Standard & \textbf{OIDC} & OpenID Connect \\
+\textbf{API} & Application Programming Interface & \textbf{OWASP} & Open Worldwide Application Security Project \\
+\textbf{CA} & Certificate Authority & \textbf{PBL} & Project-Based Learning \\
+\textbf{CSP} & Content Security Policy & \textbf{PDF} & Portable Document Format \\
+\textbf{CSPRNG} & Cryptographically Secure Pseudo-Random Number Generator & \textbf{PEM} & Privacy-Enhanced Mail (text encoding of keys) \\
+\textbf{DAS} & Development of Secure Applications & \textbf{PKCE} & Proof Key for Code Exchange \\
+\textbf{FR} & Functional Requirement & \textbf{PR} & Pull Request \\
+\textbf{GCM} & Galois/Counter Mode & \textbf{REST} & Representational State Transfer \\
+\textbf{GDPR} & General Data Protection Regulation & \textbf{RS256} & RSA signature with SHA-256 \\
+\textbf{HTTP} & Hypertext Transfer Protocol & \textbf{RSA} & Rivest--Shamir--Adleman \\
+\textbf{HTTPS} & HTTP over TLS & \textbf{SHA} & Secure Hash Algorithm \\
+\textbf{ID} & Identifier & \textbf{SPKI} & Subject Public Key Info \\
+\textbf{IP} & Internet Protocol & \textbf{SRE} & Site Reliability Engineering \\
 \textbf{IV} & Initialisation Vector & \textbf{SSH} & Secure Shell \\
 \textbf{JSON} & JavaScript Object Notation & \textbf{TLS} & Transport Layer Security \\
 \textbf{JWKS} & JSON Web Key Set & \textbf{TTL} & Time To Live \\
- & & \textbf{UI} & User Interface \\
- & & \textbf{UML} & Unified Modeling Language \\
- & & \textbf{URL} & Uniform Resource Locator \\
- & & \textbf{W3C} & World Wide Web Consortium \\
- & & \textbf{XSS} & Cross-Site Scripting \\
+\textbf{JWT} & JSON Web Token & \textbf{UI} & User Interface \\
+\textbf{KB} & Kilobyte & \textbf{UML} & Unified Modeling Language \\
+\textbf{NFR} & Non-Functional Requirement & \textbf{URL} & Uniform Resource Locator \\
+\textbf{OAEP} & Optimal Asymmetric Encryption Padding &  &  \\
 \end{tabular}
 }
 
@@ -714,7 +706,7 @@ Several controls are known to be incomplete, and the team documented them as suc
   \item the audit log stores IP addresses and user agents, which are personal data under the GDPR, but no retention period or deletion job exists yet \cite{gdpr};
   \item the Content Security Policy still allows inline styles, which are produced by the current interface code;
   \item the TLS clients verify the certificate chain but not the host name of Redis and PostgreSQL;
-  \item Redis requires neither a password nor a client certificate, so any container on the internal network can read envelopes;
+  \item the Redis server requires neither a password nor a client certificate, so any container on the internal network can read envelopes;
   \item the web share link carries the identifier in the query string, so the web tier receives it in the request line, although it does not log it by default and the page removes it after reading;
   \item response timing was not measured, so differences in processing time could still distinguish some cases that the responses themselves hide.
 \end{itemize}
