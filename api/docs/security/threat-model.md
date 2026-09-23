@@ -175,7 +175,7 @@ risk recorded; **O** = open, no control.
 | T-17 | `GET /keys/{user_id}` | TA-7 enumerates user names from the 200/404 difference. | None; the endpoint is unauthenticated and not rate-limited | O | R-06 |
 | T-18 | Error responses | Differences in status, body or timing reveal whether a secret existed or why a token failed. | SEC-4, AUTH-1, API-2 | P | R-22 |
 | T-19 | Edge transport | TA-5 reads traffic between browser and Traefik. | HTTPS in previews | P | R-12 |
-| T-20 | Traefik dashboard | TA-7 reads routing configuration from port 8080. | None; `--api.insecure=true` | O | R-14 |
+| T-20 | Administrative interfaces | TA-7 reads routing configuration from the Traefik dashboard on port 8080, or attacks the Keycloak admin console under `/keycloak/admin`. | Keycloak admin password | O | R-14 |
 | T-21 | Share link | TA-3 fetches the link and consumes or stores the secret. | WEB-4 (opening a link is non-destructive), AUTH-3 | M | — |
 
 ### 8.5 Denial of service
