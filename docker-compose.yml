@@ -1,20 +1,4 @@
 services:
-  traefik:
-    image: traefik:latest
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=traefik-net"
-      - "--entrypoints.web.address=:80"
-    ports:
-      - "${TRAEFIK_WEB_PORT:-80}:80"
-      - "${TRAEFIK_DASHBOARD_PORT:-8080}:8080"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - traefik-net
-
   # Generates CA + postgres + redis TLS certificates into the tls-certs volume.
   # Runs once per volume lifetime; subsequent starts are no-ops.
   tls-init:
@@ -36,16 +20,19 @@ services:
       args:
         NEXT_PUBLIC_BASE_PATH: ""
         NEXT_PUBLIC_API_BASE: "/api"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
     environment:
       - NEXT_PUBLIC_BASE_PATH=
       - NEXT_PUBLIC_API_BASE=/api
+      - INTERNAL_API_URL=http://api:8000
       - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
       - AUTH_TRUST_HOST=true
-      - AUTH_URL=http://localhost:${TRAEFIK_WEB_PORT:-80}/api/auth
+      - AUTH_URL=http://localhost:${WEB_PORT:-3000}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
       - AUTH_KEYCLOAK_SECRET=
-      - AUTH_KEYCLOAK_ISSUER=http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/secretshare
-      - KEYCLOAK_ISSUER=http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/secretshare
+      - AUTH_KEYCLOAK_ISSUER=http://localhost:${KEYCLOAK_PORT:-8080}/keycloak/realms/secretshare
+      - KEYCLOAK_ISSUER=http://localhost:${KEYCLOAK_PORT:-8080}/keycloak/realms/secretshare
       - KEYCLOAK_CLIENT_ID=secretshare-api
     extra_hosts:
       - "localhost:host-gateway"
@@ -54,26 +41,18 @@ services:
         limits:
           cpus: "0.50"
           memory: 256M
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.web.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.web.entrypoints=web"
-      - "traefik.http.routers.web.priority=10"
-
-      # NextAuth router: route /api/auth to web instead of api (priority 150 > api 100)
-      - "traefik.http.routers.web-auth.rule=PathPrefix(`/api/auth`)"
-      - "traefik.http.routers.web-auth.entrypoints=web"
-      - "traefik.http.routers.web-auth.priority=150"
-      - "traefik.http.routers.web-auth.service=web"
-
-      - "traefik.http.services.web.loadbalancer.server.port=3000"
-    networks:
-      - traefik-net
+    depends_on:
+      api:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
 
   api:
     build:
       context: ./api
       dockerfile: Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-secretshare}
       - POSTGRES_DB=${POSTGRES_DB:-secretshare}
@@ -84,10 +63,8 @@ services:
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080${KEYCLOAK_PATH:-/keycloak}}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
-      - API_ROOT_PATH=/api
-      # Traefik (and any proxy in front of it) sits on a private Docker
-      # network; its X-Forwarded-For carries the real client for rate limits
-      # and audit. Only private ranges: a public peer is never believed.
+      - API_ROOT_PATH=${API_ROOT_PATH:-}
+      # Private ranges trusted for X-Forwarded-For resolution
       - TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
     depends_on:
       db:
@@ -98,17 +75,6 @@ services:
         condition: service_completed_successfully
     volumes:
       - tls-certs:/certs:ro
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=PathPrefix(`/api`)"
-      - "traefik.http.routers.api.entrypoints=web"
-      - "traefik.http.routers.api.priority=100"
-      - "traefik.http.routers.api.middlewares=api-strip"
-      - "traefik.http.middlewares.api-strip.stripprefix.prefixes=/api"
-      - "traefik.http.services.api.loadbalancer.server.port=8000"
-    networks:
-      - default
-      - traefik-net
 
   db:
     image: postgres:16-alpine
@@ -143,8 +109,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - default
 
   redis:
     image: redis:7-alpine
@@ -174,8 +138,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      - default
 
   keycloak-db-init:
     image: postgres:16-alpine
@@ -202,8 +164,6 @@ services:
           WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$${KEYCLOAK_DB}')\gexec
           GRANT ALL PRIVILEGES ON DATABASE "$${KEYCLOAK_DB}" TO "$${POSTGRES_USER}";
         EOSQL
-    networks:
-      - default
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
@@ -222,6 +182,8 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -233,22 +195,8 @@ services:
       timeout: 5s
       retries: 10
       start_period: 60s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.keycloak.rule=PathPrefix(`${KEYCLOAK_PATH:-/keycloak}`)"
-      - "traefik.http.routers.keycloak.entrypoints=web"
-      - "traefik.http.routers.keycloak.priority=200"
-      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
-    networks:
-      - default
-      - traefik-net
 
 volumes:
   pgdata:
   keycloak-data:
   tls-certs:
-
-networks:
-  traefik-net:
-    name: traefik-net
-    external: true

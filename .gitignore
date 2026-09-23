@@ -46,3 +46,4 @@ Thumbs.db
 # Misc
 CLAUDE.md
 *.docx
+docker-compose.pangolin.yml
