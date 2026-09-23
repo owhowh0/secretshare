@@ -45,9 +45,20 @@
 
 % --- Section & Chapter Headings Styling ---
 % Main Chapter Title: New page, uppercase, Times New Roman, Bold, 13pt, Centered
+% NOTE: \MakeUppercase must live in the before-code (4th) slot, not the
+% format (1st) slot -- titlesec only wraps the title TEXT in braces there,
+% so that is the only place \MakeUppercase actually receives an argument.
+% NOTE: \clearpage is intentionally NOT part of this format (unlike a naive
+% first attempt). TeX's output routine ships pages asynchronously, so a
+% \clearpage fired from inside titlesec's format hook is not guaranteed to
+% have been flushed yet when \@sect internally calls \addcontentsline right
+% after -- the ToC then records the OLD page number, one page too low. The
+% fix is to issue \clearpage as an ordinary command immediately before each
+% \section{...} call in the body (see below), exactly like \unnumberedsection
+% already does correctly for Introduction/Conclusions/References.
 \titleformat{\section}[block]
-  {\clearpage\centering\fontsize{13pt}{16pt}\bfseries\MakeUppercase}
-  {\thesection}{1em}{}
+  {\centering\fontsize{13pt}{16pt}\bfseries}
+  {\thesection}{1em}{\MakeUppercase}
 \titlespacing*{\section}{0pt}{0pt}{14pt}
 
 % Subchapter Title: Times New Roman, Bold, 12pt, left-aligned, indented by 1.25cm
@@ -56,11 +67,35 @@
   {\hspace*{1.25cm}\thesubsection}{1em}{}
 \titlespacing*{\subsection}{0pt}{14pt}{8pt}
 
+% \subsec{...}: use in place of \subsection{...} everywhere in the body.
+% Forces a page break before every subchapter except the first one in its
+% chapter (so no two subchapters ever share a page), while the first
+% subchapter may continue on the chapter's opening page. The \clearpage is
+% issued as a plain command BEFORE \subsection fires -- not from inside
+% \titleformat's format hook -- for the same reason \section's page break
+% was moved out of its titleformat (see note above \titleformat{\section}):
+% \clearpage's shipout is asynchronous, and \addcontentsline (called
+% internally by \@sect) would otherwise record a page number one too low.
+\newcommand{\subsec}[1]{%
+  \ifnum\value{subsection}>0\clearpage\fi
+  \subsection{#1}%
+}
+
 % Sub-subchapter Title: Times New Roman, Bold, 12pt, left-aligned, indented by 1.25cm
 \titleformat{\subsubsection}[block]
   {\fontsize{12pt}{15pt}\bfseries}
   {\hspace*{1.25cm}\thesubsubsection}{1em}{}
 \titlespacing*{\subsubsection}{0pt}{12pt}{6pt}
+
+% --- Table of Contents heading override ---
+% The stock \tableofcontents (article class) prints its own \section*{\contentsname}
+% heading before dumping the .toc file. Since our \titleformat{\section} inserts a
+% \clearpage, that produced a second, unstyled "Contents" heading on its own extra
+% page, after our manual "TABLE OF CONTENTS" heading. Strip that built-in heading so
+% \tableofcontents only typesets the listing itself.
+\makeatletter
+\renewcommand{\tableofcontents}{\@starttoc{toc}}
+\makeatother
 
 % Unnumbered Sections (Introduction, Conclusions, References): 13pt Bold Centered Uppercase
 \newcommand{\unnumberedsection}[1]{%
@@ -222,12 +257,15 @@ University Internship Mentor: & From internship contract & *Signature \\
 
 % --- List of Abbreviations ---
 \clearpage
+\phantomsection
+\addcontentsline{toc}{section}{LIST OF ABBREVIATIONS}
 \begin{center}
   {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{LIST OF ABBREVIATIONS}\par}
 \end{center}
 \vspace{14pt}
-\noindent
-\begin{tabular}{p{0.22\textwidth} p{0.72\textwidth}}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{p{0.22\textwidth} p{0.72\textwidth}}
 \textbf{AEAD} & Authenticated Encryption with Associated Data \\
 \textbf{AES} & Advanced Encryption Standard \\
 \textbf{API} & Application Programming Interface \\
@@ -275,7 +313,7 @@ University Internship Mentor: & From internship contract & *Signature \\
 \textbf{UUID} & Universally Unique Identifier \\
 \textbf{W3C} & World Wide Web Consortium \\
 \textbf{XSS} & Cross-Site Scripting \\
-\end{tabular}
+\end{longtable}
 
 % --- Abstract ---
 \clearpage
@@ -328,11 +366,12 @@ The structure of this report is organized systematically into three principal ch
 % ------------------------------------------------------------------------------
 % CHAPTER 1: DOMAIN ANALYSIS
 % ------------------------------------------------------------------------------
+\clearpage
 \section{Domain Analysis}
 
 The development of secure ephemeral sharing software requires a rigorous exploration of cryptographic principles, contemporary web architectures, operational threat models, and real-world administrative user behaviors. This chapter presents an in-depth investigation into the operational challenges of sensitive data exchange, establishes the threat model under which the system operates, identifies key stakeholder personas, defines the core value proposition of the proposed platform, and conducts an extensive comparative study of existing industry alternatives.
 
-\subsection{Problem Overview and Security Threat Landscape}
+\subsec{Problem Overview and Security Threat Landscape}
 
 In modern software development and DevOps practices, credential exchange is an inevitable daily operational requirement. During onboarding procedures, emergency incident remediations, database migrations, and manual configuration overrides, engineers are compelled to transmit high-value confidential data. This confidential data includes database connection strings, root private keys, cloud service account credentials, and third-party webhook signing secrets. Historically, these data items have been conveyed through general-purpose corporate communication software such as Slack, Microsoft Teams, Discord, Jira tickets, and corporate email systems.
 
@@ -348,7 +387,7 @@ Furthermore, traditional web applications that attempt to solve this challenge t
 
 To establish a resilient countermeasure, an application must enforce an absolute zero-knowledge paradigm. The storage backend must remain entirely blind to the contents of the secret, the encryption keys must never touch the server filesystem or memory space, and the secret identifier must be shielded from transparent transport-layer access logs.
 
-\subsection{Target Audience and Stakeholder Analysis}
+\subsec{Target Audience and Stakeholder Analysis}
 
 The operational scope of the SecretShare platform encompasses multiple professional profiles within organizational engineering and administrative ecosystems. Understanding the workflow requirements and risk tolerance of each stakeholder group is essential for establishing viable system ergonomics without degrading cryptographic security.
 
@@ -360,7 +399,7 @@ The operational scope of the SecretShare platform encompasses multiple professio
 
 \textbf{4. External Contractors and Support Personnel.} Organizations frequently interface with external vendors and temporary contractors who do not possess corporate Active Directory or Google Workspace accounts. The platform must accommodate structured authorization flows while guaranteeing that credentials provisioned to external contractors expire automatically if not claimed within tight operational windows.
 
-\subsection{Solution Concept and Core Value Proposition}
+\subsec{Solution Concept and Core Value Proposition}
 
 To address the documented threat landscape and satisfy stakeholder requirements, \textbf{SecretShare} is architected as an end-to-end encrypted, zero-trust ephemeral secret delivery platform. The fundamental premise of the solution is that the central server is treated as a potentially compromised, untrusted entity. All confidentiality guarantees are enforced at the network edge inside user web clients.
 
@@ -391,7 +430,7 @@ Expired & Obliterated & Automated eviction via Redis TTL & Expiration timer elap
 \end{tabularx}
 \end{table}
 
-\subsection{Market Research and Comparative Analysis}
+\subsec{Market Research and Comparative Analysis}
 
 To substantiate the architectural innovation of SecretShare, an exhaustive comparative evaluation of contemporary credential sharing tools was performed. The evaluation benchmarks SecretShare against five leading commercial and open-source platforms: HashiCorp Vault, Bitwarden Send, One-Time Secret, Privnote, and Yopass.
 
@@ -430,11 +469,12 @@ The comparative analysis confirms that SecretShare effectively closes the critic
 % ------------------------------------------------------------------------------
 % CHAPTER 2: SYSTEM DESIGN AND ARCHITECTURE
 % ------------------------------------------------------------------------------
+\clearpage
 \section{System Design and Architecture}
 
 Engineering a resilient, zero-knowledge software architecture necessitates strict separation of concerns, defensive networking boundaries, and mathematically sound cryptographic protocol design. This chapter defines the technical requirement specifications of SecretShare, details the multi-container ingress and service topology, constructs formal Unified Modeling Language (UML) behavioral models, and specifies the underlying cryptographic engineering principles.
 
-\subsection{Technical Requirements Specification}
+\subsec{Technical Requirements Specification}
 
 The system requirements are derived from the operational threat model and the necessity of preventing plaintext compromise under any failure mode. The specifications are categorized into functional requirements governing system behavior and non-functional requirements establishing security, reliability, and performance boundaries.
 
@@ -457,7 +497,7 @@ The system requirements are derived from the operational threat model and the ne
   \item \textbf{NFR-05: Transport and Datastore Encryption.} All external network traffic must be encrypted via TLS 1.3/1.2 at the reverse proxy boundary. All internal network traffic between application microservices, the PostgreSQL database, and the Redis cache must be encrypted via automated internal TLS with mutual certificate authority validation.
 \end{itemize}
 
-\subsection{System Architecture and Ingress Routing}
+\subsec{System Architecture and Ingress Routing}
 
 The infrastructural architecture of SecretShare is organized as a collection of decoupled, containerized services governed by the Traefik edge reverse proxy. The system isolates public traffic from internal datastore persistence networks through defined Docker network topologies.
 
@@ -494,7 +534,7 @@ As shown in Table 2.1, the ingress routing configuration cleanly partitions URL 
 \end{tabularx}
 \end{table}
 
-\subsection{Behavioral Modeling and Protocol Workflows}
+\subsec{Behavioral Modeling and Protocol Workflows}
 
 The operational behavior of SecretShare is formalized through discrete interaction protocols governing key onboarding, secret transmission, and secret retrieval.
 
@@ -520,7 +560,7 @@ When the recipient confirms the reveal operation by clicking ``Reveal \& Burn'',
 
 \imageplaceholder{sequence-secret-reveal}{UML sequence diagram showing existence check, warning modal, atomic Lua burn in Redis, and client-side RSA/AES decryption}{Atomic Reveal, Identity Verification, and Decryption Protocol}{sequence_secret_reveal.png}
 
-\subsection{Cryptographic Engineering and Zero-Knowledge Model}
+\subsec{Cryptographic Engineering and Zero-Knowledge Model}
 
 The cryptographic architecture of SecretShare is engineered to provide forward secrecy, integrity protection, and resilience against chosen-ciphertext attacks.
 
@@ -573,11 +613,12 @@ The request URI recorded in access logs is exclusively \texttt{/api/secrets/reve
 % ------------------------------------------------------------------------------
 % CHAPTER 3: IMPLEMENTATION AND SYSTEM VERIFICATION
 % ------------------------------------------------------------------------------
+\clearpage
 \section{Implementation and System Verification}
 
 The practical engineering of SecretShare emphasizes modern asynchronous programming patterns, strict type safety, zero external cryptographic runtime dependencies on the client, and fully automated verification pipelines. This chapter documents the implementation details of the frontend client, backend application, database persistence layer, and the continuous integration and preview deployment infrastructure.
 
-\subsection{Frontend Web Client Implementation}
+\subsec{Frontend Web Client Implementation}
 
 The user interface of SecretShare is developed utilizing Next.js (App Router) and TypeScript. The application is deliberately architected with minimal external UI dependencies to maintain a lightweight footprint, high rendering performance, and a minimized attack surface.
 
@@ -609,7 +650,7 @@ According to Figure 3.2, upon successful secret creation, the interface displays
 
 \imageplaceholder{ui-creation-result}{Screenshot of the secret creation success card showing the shareable URL, copy button, payload identifier, and expiration timestamp}{Secret Creation Interface and Shareable Link Generation}{ui_creation_result.png}
 
-\subsection{Backend Microservice and Ephemeral Storage Engine}
+\subsec{Backend Microservice and Ephemeral Storage Engine}
 
 The backend application is implemented using FastAPI, Python 3.11, and modern asynchronous concurrency primitives (\texttt{asyncio}).
 
@@ -631,7 +672,7 @@ In strict compliance with audit invariant AUD-6, the \texttt{audit\_events} tabl
   \item \textbf{Input Masking Error Handlers:} global exception handlers intercept validation errors and strip the original request input from the JSON error response, ensuring that malformed payloads are never reflected in server error bodies.
 \end{itemize}
 
-\subsection{Continuous Integration, Automated Testing, and PR Previews}
+\subsec{Continuous Integration, Automated Testing, and PR Previews}
 
 To guarantee that code modifications do not introduce regressions, break cryptographic invariants, or compromise deployment stability, SecretShare implements an extensive automated verification matrix.
 
