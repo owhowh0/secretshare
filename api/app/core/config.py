@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     secret_ttl_min_seconds: int = Field(default=300, gt=0)  # 5 minutes
     secret_ttl_max_seconds: int = Field(default=86400, gt=0)  # 24 hours
 
-    # Payload limits. 64 KB per CLAUDE.md §7; the relay stays blind to the
+    # Payload limits. 64 KB per NFR-07 (SR-07); the relay stays blind to the
     # envelope's contents, so total size is the only thing it may judge.
     max_payload_bytes: int = Field(default=65536, gt=0)
 

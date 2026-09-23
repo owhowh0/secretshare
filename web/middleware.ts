@@ -4,8 +4,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 // every HTML response. Under script-src 'self' the browser refuses them and the
 // page never hydrates, so a nonce is the only way to keep scripts strict without
 // falling back to 'unsafe-inline' — which would defeat the point, since an
-// injected script reading plaintext before encryption is the threat CLAUDE.md
-// §13 names CSP against.
+// injected script reading plaintext before encryption is the threat CSP is meant
+// to counter (R-01 in api/docs/security/risk-register.md).
 //
 // The nonce must be unique per response, so it cannot come from the static
 // headers() table in next.config.ts; it is generated here and Next copies it
@@ -15,7 +15,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 // is proxied by Traefik onto this same host, so 'self' is the whole allowlist.
 // Keycloak login is a top-level redirect, covered by form-action 'self'.
 //
-// HSTS is deliberately absent: it belongs to the TLS edge (CLAUDE.md §5), and
+// HSTS is deliberately absent: it belongs to the TLS edge (R-12), and
 // sending it over plain HTTP in development would poison the browser's HSTS
 // cache for localhost.
 

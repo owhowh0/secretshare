@@ -1,9 +1,9 @@
 """
-The security tests required by CLAUDE.md §11.8.
+Security tests for the invariants in context/06_secret_lifecycle_and_e2e_encryption.md §4.
 
-These assert the invariants from §2 directly rather than through a fake store:
+These assert the invariants directly rather than through a fake store:
 the burn tests talk to a real Redis, because atomicity is a property of
-GETDEL, not of the service wrapper around it.
+the Lua burn script, not of the service wrapper around it.
 
 The Redis-backed tests are skipped unless TEST_REDIS_URL is set, so the
 default `pytest` run stays offline. Run them with:
@@ -306,7 +306,7 @@ class TestPayloadIds:
 
 
 class TestPayloadSizeLimit:
-    """CLAUDE.md §7: text only, max 64 KB."""
+    """NFR-07: text only, max 64 KB."""
 
     @requires_redis
     async def test_oversized_payload_rejected(self, client, redis):
@@ -370,7 +370,7 @@ class TestTtl:
 
 
 class TestSecurityHeaders:
-    """CLAUDE.md §11.6 plus the headers a JSON-only API should always send."""
+    """SR-28 (control API-5): the headers a JSON-only API should always send."""
 
     @requires_redis
     async def test_reveal_response_is_not_cacheable(self, client):

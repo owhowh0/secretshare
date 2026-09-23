@@ -75,7 +75,7 @@ jobs:
             | grep -oE '[0-9]+ skipped' || true)
           if [ -n "$skipped" ]; then
             echo "::error::Security tests were skipped: $skipped"
-            echo "They assert the invariants in CLAUDE.md §2 and must always run."
+            echo "They assert the invariants in context/06_secret_lifecycle_and_e2e_encryption.md §4 and must always run."
             exit 1
           fi
 

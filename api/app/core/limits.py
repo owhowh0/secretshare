@@ -17,7 +17,7 @@ class BodySizeLimitMiddleware:
     """
     Rejects oversized request bodies before they are buffered or parsed.
 
-    Upholds the 64 KB payload cap from CLAUDE.md §7. The schema's max_length
+    Upholds the 64 KB payload cap (NFR-07, SR-07). The schema's max_length
     also enforces the cap, but only after the full body has been read into
     memory — an unauthenticated caller could otherwise make the relay buffer an
     arbitrarily large request. Content-Length is checked first, and streamed

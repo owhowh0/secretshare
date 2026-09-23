@@ -4,7 +4,7 @@ import type { NextConfig } from 'next'
 // nonce and is set in middleware.ts. Two CSP headers on one response would be
 // intersected by the browser, so this table holds only the constant headers.
 //
-// HSTS is deliberately absent: it belongs to the TLS edge (CLAUDE.md §5), and
+// HSTS is deliberately absent: it belongs to the TLS edge (R-12), and
 // sending it over plain HTTP in development would poison the browser's HSTS
 // cache for localhost.
 const securityHeaders = [
