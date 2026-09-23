@@ -93,8 +93,9 @@ Located in [`api/app/core/auth.py`](../api/app/core/auth.py):
   1. Signature (verified using the public RSA key indicated by token header `kid`).
   2. Algorithm (`RS256`).
   3. Audience (`secretshare-api`).
-  4. Expiration (`exp`).
-  5. Issuer URL (`iss`).
+  4. Expiration (`exp`), when the claim is present.
+
+  The issuer (`iss`) is **not** verified: `jwt.decode` receives no `issuer` argument (R-16 in `api/docs/security/risk-register.md`).
 - **Failure responses:** every rejected token gets the same `401 "Invalid or expired token"` (the reason is logged server-side only). An unreachable JWKS endpoint gives 503. A missing `Authorization` header gives 403 (FastAPI `HTTPBearer`).
 
 ### Where auth is required
