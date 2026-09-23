@@ -315,7 +315,7 @@ The minimum viable product was built by a team of five students during a four-we
 
 Software teams exchange credentials every day: a developer needs a database password during onboarding, an operator shares a temporary cloud token during an incident, and a contractor receives an API key for an integration. In practice these values are usually pasted into the tools the team already uses. The GitGuardian report on secrets sprawl found leaked secrets in 2.4\% of the corporate Slack channels and 6.1\% of the Jira tickets that it analysed \cite{gitguardian2025}. Such messages are kept for years, copied into backups and indexed for search, so one compromised account exposes a history of credentials. Stolen credentials matter because credential abuse remains the leading initial access vector \cite{verizon2025}, as evidenced by the 2022 Uber incident \cite{uber2022} and Operation Emerald Whale \cite{emeraldwhale2024}.
 
-One-time secret links were created to shorten this exposure: a secret is stored temporarily and deleted after the first read. However, the common designs leave three weaknesses. When encryption happens on the server, the operator of the service can read every secret. When the link itself is the only credential, anybody who sees the link, including a chat application that fetches it to build a preview, can consume the secret. When the identifier is part of the URL path or query, it is written into the access logs of every proxy and web server on the way. These weaknesses are analysed in detail in Chapter~1.
+One-time secret links were created to shorten this exposure: a secret is stored temporarily and deleted after the first read. However, the common designs leave four weaknesses. When encryption happens on the server, the operator of the service can read every secret. When the link itself is the only credential, anybody who sees the link can read the secret. When the identifier is part of the URL path or query, it is written into the access logs of every proxy and web server on the way. When opening the link consumes the secret, a chat application that fetches the link to build a preview destroys it first. These weaknesses are analysed in detail in Chapter~1.
 
 The project was carried out as part of the Development of Secure Applications (DAS) internship, whose brief asks teams to build a realistic minimum viable product in which security is designed in from the start: encryption of data in transit and at rest, OAuth~2.0 for API access, input validation, error handling that does not disclose information, and documentation of threats, risks and incident response \cite{dasbrief}. A one-time secret relay suits this brief well because every one of its functions is security-relevant, and because its correctness can be expressed as a small number of verifiable invariants.
 
@@ -355,18 +355,18 @@ To reason about these weaknesses systematically, the team defined six threat act
 \begin{tabularx}{\textwidth}{|P{0.20\textwidth}|P{0.25\textwidth}|L|P{0.19\textwidth}|}
 \hline
 \textbf{Actor} & \textbf{Capability} & \textbf{Protection in SecretShare} & \textbf{Residual risk} \\ \hline
-Log reader & reads proxy, server or audit logs & identifiers only in request bodies; audit stores an 8-character prefix & logs written before the fix \\ \hline
+Log reader & reads proxy, server or audit logs & identifiers only in request bodies; audit stores an 8-character prefix & logs written before the fix; share link reaches the web server \\ \hline
 Link holder & obtains a share link & reveal requires the recipient's signed-in identity & a holder learns that a secret exists \\ \hline
-Link previewer & fetches every pasted link & opening a link only runs a non-destructive existence check & none identified \\ \hline
-Curious or compromised server & reads Redis, PostgreSQL and memory & server stores ciphertext and wrapped keys only & a server that serves malicious JavaScript \\ \hline
-Network attacker & observes traffic between containers & TLS with a CA-verified certificate to Redis and PostgreSQL & host names are not verified \\ \hline
+Link previewer & fetches every pasted link & opening a link only runs a non-destructive existence check & learns that a secret exists; identifier reaches the web server \\ \hline
+Curious or compromised server & reads Redis, PostgreSQL and memory & server stores ciphertext and wrapped keys only & malicious JavaScript; substituted public keys \\ \hline
+Network attacker & observes traffic between containers & TLS with a CA-verified certificate to Redis and PostgreSQL & host names not verified; other internal hops use HTTP; Redis has no password \\ \hline
 Wrong recipient & signs in and calls reveal & Lua script refuses and keeps the secret & learns that the secret is not theirs \\ \hline
 \end{tabularx}
 \end{table}
 
-The table shows that the most serious remaining risk is the server that delivers the JavaScript code: an attacker who controls it can send a script that reads the plaintext before it is encrypted. This risk is inherent to every browser-based end-to-end encryption scheme; it is reduced, but not removed, by the Content Security Policy described in Chapter~3.
+The table shows that the most serious remaining risk is the server that delivers the JavaScript code: an attacker who controls it can send a script that reads the plaintext before it is encrypted. This risk is inherent to every browser-based end-to-end encryption scheme; it is reduced, but not removed, by the Content Security Policy described in Chapter~3. The same server could also return its own public key in place of the recipient's, because users do not yet compare key fingerprints.
 
-The necessity of eliminating static credential sprawl is demonstrated by notable real-world breaches where initial access escalated into catastrophic infrastructure compromise. In the September 2022 Uber breach, an attacker obtained an external contractor's credentials through social engineering and multi-factor authentication (MFA) fatigue \cite{uber2022}. Once inside the intranet, the intruder performed reconnaissance and discovered plaintext administrative credentials for a Privileged Access Management (PAM) solution embedded in network shares and internal scripts, enabling full lateral takeover of cloud and identity systems. Similarly, in mid-2024, the Sysdig Threat Research Team uncovered Operation Emerald Whale, an automated cyber campaign that exfiltrated over 15,000 Git configurations, private repositories, and cloud tokens sprawled across developer systems \cite{emeraldwhale2024}. SecretShare directly remedies the root causes of both incidents: by enforcing browser-side hybrid encryption, recipient authentication, and automatic single-delivery destruction (burn-after-reading), credentials never persist in corporate chat histories, file shares, or server databases, depriving intruders of static credential backlogs even following an endpoint compromise.
+Two real-world breaches show how initial access escalates when credentials are left in shared locations. In the September 2022 Uber breach, an attacker obtained an external contractor's credentials through social engineering and multi-factor authentication (MFA) fatigue \cite{uber2022}. Once inside the intranet, the intruder performed reconnaissance and discovered plaintext administrative credentials for a Privileged Access Management (PAM) solution embedded in network shares and internal scripts, enabling full lateral takeover of cloud and identity systems. Similarly, in mid-2024, the Sysdig Threat Research Team uncovered Operation Emerald Whale, an automated cyber campaign that exfiltrated over 15,000 Git configurations, private repositories, and cloud tokens sprawled across developer systems \cite{emeraldwhale2024}. Both incidents share one element that SecretShare addresses: credentials that stayed readable in shared locations. With browser-side encryption, recipient authentication and single delivery, a shared credential does not persist in chat histories, file shares or server databases. The initial access in the Uber case, MFA fatigue, is not addressed, as SecretShare does not yet offer multi-factor authentication.
 
 % ------------------------------------------------------------------------------
 \subsec{Target Audience}
@@ -391,19 +391,19 @@ External contractors & receive a secret without a separate tool & addressing by 
 \end{tabularx}
 \end{table}
 
-Developers form the largest group. They receive database passwords, API keys and test accounts when they join a project or start a new integration, and they send such values to colleagues who work on other parts of the system. Their main needs are speed and simplicity: a secret must be sent in less than a minute, from any operating system, without installing software or managing encryption keys by hand.
+Developers form the largest group. They receive database passwords, API keys and test accounts when they join a project, and they send such values to colleagues. Their main needs are speed and simplicity: a secret must be sent in less than a minute, from any operating system, without installing software or managing encryption keys by hand.
 
 DevOps engineers and site reliability engineers provision infrastructure and rotate credentials. They often need to hand over a temporary token during an incident, under time pressure and in a channel that other people can see. For them it is essential that a secret expires automatically if it is not read, that its size is limited, and that the handover works through an interface that they can also call from scripts.
 
-Security officers and auditors do not send secrets themselves, but they are responsible for policies that forbid credentials in chat. They need a sanctioned alternative that users will actually adopt, and evidence after the fact: who created a secret, whether and when it was read, and whether someone else tried to read it. At the same time the evidence must not become a new store of secrets.
+Security officers and auditors do not send secrets themselves, but they are responsible for policies that forbid credentials in chat. They need a sanctioned alternative that users will actually adopt, and evidence after the fact: whether and when a secret was read, and whether someone else tried to read it; the audit log records time and address, not yet the account. The evidence itself must not become a new store of secrets.
 
-External contractors and partners are the fourth group. They are often given accounts in the organisation's identity provider for the duration of a contract. The system must allow them to receive a secret addressed to their account, and must make sure that a secret sent to a contractor who never opens it disappears on its own. Anonymous recipients are not served, as that would reintroduce the link-holder weakness.
+External contractors and partners, the fourth group, often receive accounts in the organisation's identity provider for the duration of a contract. The system must allow them to receive a secret addressed to their account, and must make sure that a secret sent to a contractor who never opens it disappears on its own. Anonymous recipients are not served, as that would reintroduce the link-holder weakness.
 
 
 % ------------------------------------------------------------------------------
 \subsec{Solution Concept}
 
-SecretShare is a relay for secrets addressed to a named person. A signed-in sender types the secret and the user name of the recipient. The browser encrypts the secret for the devices that the recipient has registered, sends the encrypted envelope to the server and receives a share link. The recipient opens the link, sees a warning that the secret will be destroyed, signs in if necessary and confirms. The server hands the envelope to the recipient and deletes it in the same step, and the recipient's browser decrypts it locally. The concept rests on four principles.
+SecretShare is a relay for secrets addressed to a named person. A sender types the secret and the user name of the recipient; signing in is not yet required for this step. The browser encrypts the secret for the devices that the recipient has registered, sends the encrypted envelope to the server and receives a share link. The recipient opens the link, sees a warning that the secret will be destroyed, signs in if necessary and confirms. The server hands the envelope to the recipient and deletes it in the same step, and the recipient's browser decrypts it locally. The concept rests on four principles.
 
 The first principle is that the server is blind. Encryption and decryption use the Web Cryptography API of the browser \cite{webcrypto}, and the server receives only ciphertext, an initialisation vector and content keys wrapped with the recipients' public keys. The server judges the envelope only by its size and by the validity of its fields.
 
@@ -411,7 +411,7 @@ The second principle is that access is bound to identity, not to the link. Readi
 
 The third principle is that a secret is delivered once. The check of the recipient and the deletion happen as one atomic operation inside the data store, so neither a wrong recipient nor two parallel requests of the right recipient can break the guarantee.
 
-The fourth principle is that nothing secret is logged. Identifiers travel in request bodies, never in the path or query of an API request, error responses do not echo input, and the audit log stores only a short prefix of an identifier.
+The fourth principle is that nothing secret is logged. Identifiers travel in request bodies, never in the path or query of an API request, validation errors do not echo input, and the audit log stores only a short prefix of an identifier.
 
 \begin{table}[H]
 \leadin{As shown in Table~1.3, a secret passes through a small number of states, and every state has a defined location and a defined protection.}
@@ -458,7 +458,7 @@ Server can decrypt & yes & no & no & without passphrase & no \\ \hline
 Recipient identity checked & no, token holder & optional e-mail & commercial edition & no & yes, OIDC \\ \hline
 Single use & yes & access limit & optional & yes & yes, atomic \\ \hline
 Denied reader keeps secret & -- & -- & -- & -- & yes \\ \hline
-Open source, self-hosted & yes & yes & yes & yes & yes \\ \hline
+Source available, self-hosted & yes, BSL licence & yes & yes & yes & yes, no licence yet \\ \hline
 Needs recipient enrolment & yes & no & no & no & yes \\ \hline
 \end{tabularx}
 \end{table}
