@@ -105,7 +105,7 @@
   justification=raggedleft, singlelinecheck=false, position=top, skip=6pt}
 
 % Table content: 11 pt, single spacing, ragged-right cells.
-\newcommand{\tablesetup}{\fontsize{11pt}{13pt}\selectfont\singlespacing}
+\newcommand{\tablesetup}{\fontsize{11pt}{13pt}\selectfont\singlespacing\renewcommand{\arraystretch}{1.15}}
 \newcolumntype{L}{>{\raggedright\arraybackslash}X}
 \newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
 
@@ -201,15 +201,15 @@
 
 \begin{flushleft}
 {\bfseries Team members:}\\[0.3cm]
-{\singlespacing\renewcommand{\arraystretch}{1.45}%
-\begin{tabularx}{\textwidth}{|>{\bfseries}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|p{0.26\textwidth}|}
+{\fontsize{11pt}{13pt}\selectfont\singlespacing\renewcommand{\arraystretch}{1.35}%
+\begin{tabularx}{\textwidth}{|>{\bfseries}p{0.30\textwidth}|>{\raggedright\arraybackslash}X|>{\centering\arraybackslash}p{0.22\textwidth}|}
 \hline
-Student 1: & Rustem Cimendur, FAF-243 & \\ \hline
-Student 2: & Ilie Covali, FAF-243 & \\ \hline
-Student 3: & Ecaterina Kushnirenko, FAF-243 & \\ \hline
-Student 4: & Calin Poiata, FAF-243 & \\ \hline
-Student 5: & Ionu\c{t} \c{S}oimu, FAF-243 & \\ \hline
-University Internship Mentor & Dominic Flocea & \\ \hline
+Student 1: & Cimendur Rustem, FAF-243 & *Signature \\ \hline
+Student 2: & Covali Ilie, FAF-243 & *Signature \\ \hline
+Student 3: & Kushnirenko Ecaterina, FAF-243 & *Signature \\ \hline
+Student 4: & Poiata Calin, FAF-243 & *Signature \\ \hline
+Student 5: & \c{S}oimu Ionu\c{t}, FAF-243 & *Signature \\ \hline
+University Internship Mentor & as. univ. Grosu Olga & *Signature \\ \hline
 \end{tabularx}}
 
 \vspace{0.5cm}
@@ -220,7 +220,7 @@ University Internship Mentor & Dominic Flocea & \\ \hline
 \vfill
 
 \vspace{0.3cm}
-{\fontsize{11pt}{13pt}\selectfont Submission date: 23/09/2026}\\[0.2cm]
+{\fontsize{11pt}{13pt}\selectfont Submission date: \underline{\hspace{1.5cm}} / \underline{\hspace{1.5cm}} / \underline{\hspace{2.0cm}}}\\[0.2cm]
 {\fontsize{12pt}{14pt}\selectfont\bfseries Chisinau, 2026}
 \end{center}
 \end{titlepage}
@@ -339,17 +339,15 @@ To reason about these weaknesses systematically, the team defined six threat act
 \tablesetup
 \caption{Threat actors and the corresponding protections}
 \label{tab:threats}
-\begin{tabularx}{\textwidth}{P{0.20\textwidth} P{0.25\textwidth} L P{0.19\textwidth}}
-\toprule
-\textbf{Actor} & \textbf{Capability} & \textbf{Protection in SecretShare} & \textbf{Residual risk} \\
-\midrule
-Log reader & reads proxy, server or audit logs & identifiers only in request bodies; audit stores an 8-character prefix & logs written before the fix \\
-Link holder & obtains a share link & reveal requires the recipient's signed-in identity & a holder learns that a secret exists \\
-Link previewer & fetches every pasted link & opening a link only runs a non-destructive existence check & none identified \\
-Curious or compromised server & reads Redis, PostgreSQL and memory & server stores ciphertext and wrapped keys only & a server that serves malicious JavaScript \\
-Network attacker & observes traffic between containers & TLS with a CA-verified certificate to Redis and PostgreSQL & host names are not verified \\
-Wrong recipient & signs in and calls reveal & Lua script refuses and keeps the secret & learns that the secret is not theirs \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.20\textwidth}|P{0.25\textwidth}|L|P{0.19\textwidth}|}
+\hline
+\textbf{Actor} & \textbf{Capability} & \textbf{Protection in SecretShare} & \textbf{Residual risk} \\ \hline
+Log reader & reads proxy, server or audit logs & identifiers only in request bodies; audit stores an 8-character prefix & logs written before the fix \\ \hline
+Link holder & obtains a share link & reveal requires the recipient's signed-in identity & a holder learns that a secret exists \\ \hline
+Link previewer & fetches every pasted link & opening a link only runs a non-destructive existence check & none identified \\ \hline
+Curious or compromised server & reads Redis, PostgreSQL and memory & server stores ciphertext and wrapped keys only & a server that serves malicious JavaScript \\ \hline
+Network attacker & observes traffic between containers & TLS with a CA-verified certificate to Redis and PostgreSQL & host names are not verified \\ \hline
+Wrong recipient & signs in and calls reveal & Lua script refuses and keeps the secret & learns that the secret is not theirs \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -365,18 +363,16 @@ SecretShare is intended for organisations in which people regularly hand credent
 \tablesetup
 \caption{User needs and the features that address them}
 \label{tab:needs}
-\begin{tabularx}{\textwidth}{P{0.24\textwidth} L P{0.30\textwidth}}
-\toprule
-\textbf{User group} & \textbf{Need} & \textbf{Feature} \\
-\midrule
-Developers & send a secret quickly from any browser & web interface, share link with copy button \\
-Developers & no manual key management & device keys generated and registered on first sign-in \\
-DevOps and SRE & secret must not outlive the handover & TTL from 5 minutes to 24 hours, burn on read \\
-DevOps and SRE & integrate with scripts & documented REST API with OpenAPI description \\
-Security officers & evidence of reading & append-only audit log of creation, reading and denial \\
-Security officers & no new store of secrets & ciphertext only; audit keeps an identifier prefix \\
-External contractors & receive a secret without a separate tool & addressing by identity-provider user name \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.24\textwidth}|L|P{0.30\textwidth}|}
+\hline
+\textbf{User group} & \textbf{Need} & \textbf{Feature} \\ \hline
+Developers & send a secret quickly from any browser & web interface, share link with copy button \\ \hline
+Developers & no manual key management & device keys generated and registered on first sign-in \\ \hline
+DevOps and SRE & secret must not outlive the handover & TTL from 5 minutes to 24 hours, burn on read \\ \hline
+DevOps and SRE & integrate with scripts & documented REST API with OpenAPI description \\ \hline
+Security officers & evidence of reading & append-only audit log of creation, reading and denial \\ \hline
+Security officers & no new store of secrets & ciphertext only; audit keeps an identifier prefix \\ \hline
+External contractors & receive a secret without a separate tool & addressing by identity-provider user name \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -407,15 +403,13 @@ The fourth principle is that nothing secret is logged. Identifiers travel in req
 \tablesetup
 \caption{Life cycle of a secret}
 \label{tab:lifecycle}
-\begin{tabularx}{\textwidth}{P{0.14\textwidth} P{0.21\textwidth} L P{0.24\textwidth}}
-\toprule
-\textbf{State} & \textbf{Location} & \textbf{Protection} & \textbf{Leaves the state when} \\
-\midrule
-Composed & sender's browser memory & never sent in plaintext & the sender submits the form \\
-Stored & Redis, key \texttt{s:<id>} & AES-256-GCM ciphertext, key wrapped per device, TTL set & recipient reveals it or the TTL elapses \\
-Burned & deleted & Lua script deletes it atomically after the recipient check & final state \\
-Expired & deleted by Redis & no copy remains on the server & final state \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.14\textwidth}|P{0.21\textwidth}|L|P{0.24\textwidth}|}
+\hline
+\textbf{State} & \textbf{Location} & \textbf{Protection} & \textbf{Leaves the state when} \\ \hline
+Composed & sender's browser memory & never sent in plaintext & the sender submits the form \\ \hline
+Stored & Redis, key \texttt{s:<id>} & AES-256-GCM ciphertext, key wrapped per device, TTL set & recipient reveals it or the TTL elapses \\ \hline
+Burned & deleted & Lua script deletes it atomically after the recipient check & final state \\ \hline
+Expired & deleted by Redis & no copy remains on the server & final state \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -441,18 +435,16 @@ Onetime Secret is a widely used public service whose secrets, according to its o
 \tablesetup
 \caption{Comparison of secret-sharing tools}
 \label{tab:market}
-\begin{tabularx}{\textwidth}{L P{0.12\textwidth} P{0.13\textwidth} P{0.12\textwidth} P{0.14\textwidth} P{0.13\textwidth}}
-\toprule
-\textbf{Property} & \textbf{Vault} & \textbf{Bitwarden Send} & \textbf{Yopass} & \textbf{Onetime Secret} & \textbf{SecretShare} \\
-\midrule
-Encryption in the browser & no (server) & yes & yes & no (server) & yes \\
-Server can decrypt & yes & no & no & without passphrase & no \\
-Recipient identity checked & no, token holder & optional e-mail & commercial edition & no & yes, OIDC \\
-Single use & yes & access limit & optional & yes & yes, atomic \\
-Denied reader keeps secret & -- & -- & -- & -- & yes \\
-Open source, self-hosted & yes & yes & yes & yes & yes \\
-Needs recipient enrolment & yes & no & no & no & yes \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|L|P{0.12\textwidth}|P{0.13\textwidth}|P{0.12\textwidth}|P{0.14\textwidth}|P{0.13\textwidth}|}
+\hline
+\textbf{Property} & \textbf{Vault} & \textbf{Bitwarden Send} & \textbf{Yopass} & \textbf{Onetime Secret} & \textbf{SecretShare} \\ \hline
+Encryption in the browser & no (server) & yes & yes & no (server) & yes \\ \hline
+Server can decrypt & yes & no & no & without passphrase & no \\ \hline
+Recipient identity checked & no, token holder & optional e-mail & commercial edition & no & yes, OIDC \\ \hline
+Single use & yes & access limit & optional & yes & yes, atomic \\ \hline
+Denied reader keeps secret & -- & -- & -- & -- & yes \\ \hline
+Open source, self-hosted & yes & yes & yes & yes & yes \\ \hline
+Needs recipient enrolment & yes & no & no & no & yes \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -473,20 +465,18 @@ The requirements were derived from the user needs in Table~1.2 and from the thre
 \tablesetup
 \caption{Functional requirements}
 \label{tab:fr}
-\begin{tabularx}{\textwidth}{P{0.08\textwidth} L P{0.29\textwidth}}
-\toprule
-\textbf{ID} & \textbf{Requirement} & \textbf{Realised by} \\
-\midrule
-FR-01 & A user signs in through the organisation's identity provider using the authorisation code flow with PKCE. & Keycloak, Auth.js \\
-FR-02 & On first sign-in the browser generates an RSA key pair, keeps the private key locally and registers the public key. & \texttt{POST /api/keys/register} \\
-FR-03 & A sender obtains the public keys of the recipient's active devices. & \texttt{GET /api/keys/\{user\_id\}} \\
-FR-04 & The browser encrypts the secret and sends only the envelope, with an optional lifetime of 5 minutes to 24 hours. & \texttt{POST /api/secrets} \\
-FR-05 & The sender receives an identifier and a share link that can be copied with one click. & web interface \\
-FR-06 & Opening a link checks whether the secret exists without consuming it and shows a burn warning. & \texttt{POST /api/secrets/exists} \\
-FR-07 & After confirmation, the signed-in recipient receives the envelope, which is deleted at the same moment. & \texttt{POST /api/secrets/reveal} \\
-FR-08 & The recipient's browser decrypts the secret in memory. & \texttt{lib/crypto.ts} \\
-FR-09 & Creation, reading and denied reading attempts are recorded in an audit log. & \texttt{audit\_events} table \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.08\textwidth}|L|P{0.29\textwidth}|}
+\hline
+\textbf{ID} & \textbf{Requirement} & \textbf{Realised by} \\ \hline
+FR-01 & A user signs in through the organisation's identity provider using the authorisation code flow with PKCE. & Keycloak, Auth.js \\ \hline
+FR-02 & On first sign-in the browser generates an RSA key pair, keeps the private key locally and registers the public key. & \texttt{POST /api/keys/register} \\ \hline
+FR-03 & A sender obtains the public keys of the recipient's active devices. & \texttt{GET /api/keys/\{user\_id\}} \\ \hline
+FR-04 & The browser encrypts the secret and sends only the envelope, with an optional lifetime of 5 minutes to 24 hours. & \texttt{POST /api/secrets} \\ \hline
+FR-05 & The sender receives an identifier and a share link that can be copied with one click. & web interface \\ \hline
+FR-06 & Opening a link checks whether the secret exists without consuming it and shows a burn warning. & \texttt{POST /api/secrets/exists} \\ \hline
+FR-07 & After confirmation, the signed-in recipient receives the envelope, which is deleted at the same moment. & \texttt{POST /api/secrets/reveal} \\ \hline
+FR-08 & The recipient's browser decrypts the secret in memory. & \texttt{lib/crypto.ts} \\ \hline
+FR-09 & Creation, reading and denied reading attempts are recorded in an audit log. & \texttt{audit\_events} table \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -497,21 +487,19 @@ The non-functional requirements define the quality attributes, most of which are
 \tablesetup
 \caption{Non-functional requirements}
 \label{tab:nfr}
-\begin{tabularx}{\textwidth}{P{0.08\textwidth} P{0.17\textwidth} L}
-\toprule
-\textbf{ID} & \textbf{Attribute} & \textbf{Requirement} \\
-\midrule
-NFR-01 & confidentiality & The server never receives plaintext or an unwrapped content key and judges an envelope only by size and field validity. \\
-NFR-02 & single delivery & Two concurrent reveal requests never both receive the same secret. \\
-NFR-03 & integrity of access & A request by anyone except the recipient never deletes the secret. \\
-NFR-04 & uniform errors &Unknown, burned and expired identifiers produce identical status, body and headers. \\
-NFR-05 & no secret logging & No full identifier, ciphertext or token appears in any log; identifiers never appear in API paths or query strings. \\
-NFR-06 & identifier strength & Identifiers carry 256 bits from a CSPRNG. \\
-NFR-07 & resource limits & The request body is limited to 64 KB; clients are limited to 10 creations and 30 retrieval calls per minute. \\
-NFR-08 & transport security & Traffic from the API to Redis and PostgreSQL uses TLS with certificates issued by an internal CA. \\
-NFR-09 & availability & A failure of the audit database does not change any response to a secret request. \\
-NFR-10 & usability & The system works in a current browser without installing software. \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.08\textwidth}|P{0.17\textwidth}|L|}
+\hline
+\textbf{ID} & \textbf{Attribute} & \textbf{Requirement} \\ \hline
+NFR-01 & confidentiality & The server never receives plaintext or an unwrapped content key and judges an envelope only by size and field validity. \\ \hline
+NFR-02 & single delivery & Two concurrent reveal requests never both receive the same secret. \\ \hline
+NFR-03 & integrity of access & A request by anyone except the recipient never deletes the secret. \\ \hline
+NFR-04 & uniform errors &Unknown, burned and expired identifiers produce identical status, body and headers. \\ \hline
+NFR-05 & no secret logging & No full identifier, ciphertext or token appears in any log; identifiers never appear in API paths or query strings. \\ \hline
+NFR-06 & identifier strength & Identifiers carry 256 bits from a CSPRNG. \\ \hline
+NFR-07 & resource limits & The request body is limited to 64 KB; clients are limited to 10 creations and 30 retrieval calls per minute. \\ \hline
+NFR-08 & transport security & Traffic from the API to Redis and PostgreSQL uses TLS with certificates issued by an internal CA. \\ \hline
+NFR-09 & availability & A failure of the audit database does not change any response to a secret request. \\ \hline
+NFR-10 & usability & The system works in a current browser without installing software. \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -613,16 +601,14 @@ The design is summarised by five invariants that the tests in Chapter~3 verify. 
 \tablesetup
 \caption{Security invariants and their enforcement}
 \label{tab:invariants}
-\begin{tabularx}{\textwidth}{P{0.05\textwidth} P{0.34\textwidth} L}
-\toprule
-\textbf{No.} & \textbf{Invariant} & \textbf{Enforced by} \\
-\midrule
-1 & the server is blind to envelope contents and judges only their size & Pydantic schemas, body size middleware \\
-3 & two concurrent readers never both receive a secret & Lua burn script in \texttt{SecretStore} \\
-4 & identifiers carry 256 bits from a CSPRNG & \texttt{core/ids.py} \\
-5 & unknown, burned and expired identifiers are indistinguishable & one 404 handler, no separate expiry error, audit failures ignored \\
-6 & nothing secret is logged & identifiers in bodies, log redaction filter, 8-character audit prefix \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.05\textwidth}|P{0.34\textwidth}|L|}
+\hline
+\textbf{No.} & \textbf{Invariant} & \textbf{Enforced by} \\ \hline
+1 & the server is blind to envelope contents and judges only their size & Pydantic schemas, body size middleware \\ \hline
+3 & two concurrent readers never both receive a secret & Lua burn script in \texttt{SecretStore} \\ \hline
+4 & identifiers carry 256 bits from a CSPRNG & \texttt{core/ids.py} \\ \hline
+5 & unknown, burned and expired identifiers are indistinguishable & one 404 handler, no separate expiry error, audit failures ignored \\ \hline
+6 & nothing secret is logged & identifiers in bodies, log redaction filter, 8-character audit prefix \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -647,17 +633,15 @@ The API is a FastAPI application written in Python 3.12. All configuration is re
 \tablesetup
 \caption{Endpoints of the API}
 \label{tab:api}
-\begin{tabularx}{\textwidth}{P{0.30\textwidth} P{0.10\textwidth} L}
-\toprule
-\textbf{Endpoint} & \textbf{Auth} & \textbf{Behaviour} \\
-\midrule
-\texttt{POST /api/keys/register} & token & registers a device public key and revokes the previous key of the same platform \\
-\texttt{GET /api/keys/\{user\_id\}} & none & returns the active public keys of a user or 404 \\
-\texttt{POST /api/secrets} & none & stores an envelope; 201 with identifier and expiry; creation rate limit \\
-\texttt{POST /api/secrets/exists} & none & reports whether a secret exists without changing it \\
-\texttt{POST /api/secrets/reveal} & token & 200 with envelope, 403 for another user (secret kept), 404 otherwise \\
-\texttt{GET /api/health} & none & liveness check \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.30\textwidth}|P{0.10\textwidth}|L|}
+\hline
+\textbf{Endpoint} & \textbf{Auth} & \textbf{Behaviour} \\ \hline
+\texttt{POST /api/keys/register} & token & registers a device public key and revokes the previous key of the same platform \\ \hline
+\texttt{GET /api/keys/\{user\_id\}} & none & returns the active public keys of a user or 404 \\ \hline
+\texttt{POST /api/secrets} & none & stores an envelope; 201 with identifier and expiry; creation rate limit \\ \hline
+\texttt{POST /api/secrets/exists} & none & reports whether a secret exists without changing it \\ \hline
+\texttt{POST /api/secrets/reveal} & token & 200 with envelope, 403 for another user (secret kept), 404 otherwise \\ \hline
+\texttt{GET /api/health} & none & liveness check \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -679,18 +663,16 @@ The DAS brief requires teams to explain, for each security measure, the problem 
 \tablesetup
 \caption{Implemented security controls}
 \label{tab:controls}
-\begin{tabularx}{\textwidth}{P{0.19\textwidth} L P{0.29\textwidth}}
-\toprule
-\textbf{Control} & \textbf{Implementation} & \textbf{Verification} \\
-\midrule
-Identifiers kept out of request lines & reveal and existence check take the identifier in a JSON body; a log filter rewrites any \texttt{/secrets/<id>} path & a test fails if any secrets route gains a path parameter; captured-log tests \\
-Audit without secret material & 8-character prefix, enforced also by a \texttt{varchar(8)} column and a CHECK constraint & insert of a full identifier rejected by PostgreSQL \\
-Append-only audit log & database trigger raises on UPDATE and DELETE & UPDATE and DELETE fail, row unchanged \\
-Audit does not weaken responses & audit write errors are logged and ignored & broken database still yields 201, 200 and 404 with identical bodies \\
-Uniform authentication errors & one constant message for every invalid token, details only in the server log & six token faults give byte-identical bodies \\
-Content Security Policy & per-request nonce, \texttt{strict-dynamic}, no \texttt{unsafe-inline} for scripts & injected inline script blocked in a headless browser \\
-Internal TLS & CA-verified TLS from the API to Redis and PostgreSQL & 18 tests of certificates and client settings \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.19\textwidth}|L|P{0.29\textwidth}|}
+\hline
+\textbf{Control} & \textbf{Implementation} & \textbf{Verification} \\ \hline
+Identifiers kept out of request lines & reveal and existence check take the identifier in a JSON body; a log filter rewrites any \texttt{/secrets/<id>} path & a test fails if any secrets route gains a path parameter; captured-log tests \\ \hline
+Audit without secret material & 8-character prefix, enforced also by a \texttt{varchar(8)} column and a CHECK constraint & insert of a full identifier rejected by PostgreSQL \\ \hline
+Append-only audit log & database trigger raises on UPDATE and DELETE & UPDATE and DELETE fail, row unchanged \\ \hline
+Audit does not weaken responses & audit write errors are logged and ignored & broken database still yields 201, 200 and 404 with identical bodies \\ \hline
+Uniform authentication errors & one constant message for every invalid token, details only in the server log & six token faults give byte-identical bodies \\ \hline
+Content Security Policy & per-request nonce, \texttt{strict-dynamic}, no \texttt{unsafe-inline} for scripts & injected inline script blocked in a headless browser \\ \hline
+Internal TLS & CA-verified TLS from the API to Redis and PostgreSQL & 18 tests of certificates and client settings \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -721,20 +703,18 @@ Testing was treated as part of every change: a security control was considered c
 \tablesetup
 \caption{Main groups of automated tests}
 \label{tab:tests}
-\begin{tabularx}{\textwidth}{P{0.43\textwidth} P{0.07\textwidth} L}
-\toprule
-\textbf{Test module} & \textbf{Tests} & \textbf{What is verified} \\
-\midrule
-\nolinkurl{test_secrets_invariants.py} & 16 & single delivery, denied reveal keeps the secret, 10 intruders racing 10 recipients \\
-\nolinkurl{test_audit*.py} (3 modules) & 23 & events recorded, prefix only, database guards, responses unaffected by audit failures \\
-\nolinkurl{test_access_log.py} & 9 & no identifier in routes or logs \\
-\nolinkurl{test_auth_error_disclosure.py} & 7 & identical bodies for all token faults, no token in logs \\
-\nolinkurl{test_secrets.py}, \nolinkurl{test_api.py} & 39 & validation, TTL bounds, size limit, error mapping \\
-\nolinkurl{test_config.py}, \nolinkurl{test_proxy.py} & 38 & settings validation, trusted proxy handling \\
-\nolinkurl{test_tls.py} & 18 & certificate generation, permissions, TLS client settings \\
-\nolinkurl{test_oauth_integration.py} & 5 & live token flow against Keycloak \\
-\nolinkurl{csp.test.mjs} (web client) & 10 & CSP headers, nonce uniqueness, blocked injected script \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.43\textwidth}|P{0.07\textwidth}|L|}
+\hline
+\textbf{Test module} & \textbf{Tests} & \textbf{What is verified} \\ \hline
+\nolinkurl{test_secrets_invariants.py} & 16 & single delivery, denied reveal keeps the secret, 10 intruders racing 10 recipients \\ \hline
+\nolinkurl{test_audit*.py} (3 modules) & 23 & events recorded, prefix only, database guards, responses unaffected by audit failures \\ \hline
+\nolinkurl{test_access_log.py} & 9 & no identifier in routes or logs \\ \hline
+\nolinkurl{test_auth_error_disclosure.py} & 7 & identical bodies for all token faults, no token in logs \\ \hline
+\nolinkurl{test_secrets.py}, \nolinkurl{test_api.py} & 39 & validation, TTL bounds, size limit, error mapping \\ \hline
+\nolinkurl{test_config.py}, \nolinkurl{test_proxy.py} & 38 & settings validation, trusted proxy handling \\ \hline
+\nolinkurl{test_tls.py} & 18 & certificate generation, permissions, TLS client settings \\ \hline
+\nolinkurl{test_oauth_integration.py} & 5 & live token flow against Keycloak \\ \hline
+\nolinkurl{csp.test.mjs} (web client) & 10 & CSP headers, nonce uniqueness, blocked injected script \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -743,16 +723,14 @@ Testing was treated as part of every change: a security control was considered c
 \tablesetup
 \caption{Continuous integration and deployment workflows}
 \label{tab:ci}
-\begin{tabularx}{\textwidth}{P{0.20\textwidth} P{0.26\textwidth} L}
-\toprule
-\textbf{Workflow} & \textbf{Trigger} & \textbf{Steps} \\
-\midrule
-Test API & pull requests; pushes to main, develop and feature branches & migrations, unit and security tests, failure if any security test is skipped; then the full stack in Docker with routing checks and live OAuth tests \\
-Test TLS & same as Test API & certificate script and TLS client tests \\
-PR Preview & pull request opened, updated or closed & deploys an isolated stack for the pull request over Tailscale SSH, runs smoke tests for routing, documentation, sign-in and the secret life cycle; removes the stack when the pull request closes \\
-Deploy Staging & manual, main branch only & deploys main to the staging server \\
-Build Report & pushes to report branches & compiles the LaTeX report and publishes the PDF \\
-\bottomrule
+\begin{tabularx}{\textwidth}{|P{0.20\textwidth}|P{0.26\textwidth}|L|}
+\hline
+\textbf{Workflow} & \textbf{Trigger} & \textbf{Steps} \\ \hline
+Test API & pull requests; pushes to main, develop and feature branches & migrations, unit and security tests, failure if any security test is skipped; then the full stack in Docker with routing checks and live OAuth tests \\ \hline
+Test TLS & same as Test API & certificate script and TLS client tests \\ \hline
+PR Preview & pull request opened, updated or closed & deploys an isolated stack for the pull request over Tailscale SSH, runs smoke tests for routing, documentation, sign-in and the secret life cycle; removes the stack when the pull request closes \\ \hline
+Deploy Staging & manual, main branch only & deploys main to the staging server \\ \hline
+Build Report & pushes to report branches & compiles the LaTeX report and publishes the PDF \\ \hline
 \end{tabularx}
 \end{table}
 
