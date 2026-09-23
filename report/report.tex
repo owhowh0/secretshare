@@ -1,605 +1,816 @@
-% Options for packages loaded elsewhere
-\PassOptionsToPackage{unicode}{hyperref}
-\PassOptionsToPackage{hyphens}{url}
-\documentclass[
-]{article}
-\usepackage{xcolor}
-\usepackage{amsmath,amssymb}
-\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
-\usepackage{iftex}
-\ifPDFTeX
-  \usepackage[T1]{fontenc}
-  \usepackage[utf8]{inputenc}
-  \usepackage{textcomp} % provide euro and other symbols
-\else % if luatex or xetex
-  \usepackage{unicode-math} % this also loads fontspec
-  \defaultfontfeatures{Scale=MatchLowercase}
-  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
-\fi
-\usepackage{lmodern}
-\ifPDFTeX\else
-  % xetex/luatex font selection
-\fi
-% Use upquote if available, for straight quotes in verbatim environments
-\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
-\IfFileExists{microtype.sty}{% use microtype if available
-  \usepackage[]{microtype}
-  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
-}{}
-\makeatletter
-\@ifundefined{KOMAClassName}{% if non-KOMA class
-  \IfFileExists{parskip.sty}{%
-    \usepackage{parskip}
-  }{% else
-    \setlength{\parindent}{0pt}
-    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
-}{% if KOMA class
-  \KOMAoptions{parskip=half}}
-\makeatother
-\usepackage{longtable,booktabs,array}
-\usepackage{caption}
-\captionsetup[table]{skip=6pt}
-\newcounter{none} % for unnumbered tables
-\usepackage{calc} % for calculating minipage widths
-% Correct order of tables after \paragraph or \subparagraph
-\usepackage{etoolbox}
-\makeatletter
-\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
-\makeatother
-% Allow footnotes in longtable head/foot
-\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
-\makesavenoteenv{longtable}
-\usepackage{graphicx}
-\makeatletter
-\newsavebox\pandoc@box
-\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
-  \sbox\pandoc@box{#1}%
-  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
-  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
-  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
-  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
-  \else\usebox{\pandoc@box}%
-  \fi%
-}
-% Set default figure placement to htbp
-\def\fps@figure{htbp}
-\makeatother
-\setlength{\emergencystretch}{3em} % prevent overfull lines
-\providecommand{\tightlist}{%
-  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
-\usepackage{bookmark}
-\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
-\urlstyle{same}
-% fallback for those not using the hyperref driver hyperxmp:
-\makeatletter
-\@ifundefined{xmpquote}{\newcommand{\xmpquote}[1]{#1}}{}
-\makeatother
-\hypersetup{
-  hidelinks,
-  pdfcreator={LaTeX via pandoc}}
+\documentclass[12pt,a4paper]{article}
 
-\author{}
-\date{}
+% --- Page Geometry according to Paper Formatting Guidelines ---
+% Top: 20mm, Bottom: 20mm, Left: 20mm, Right: 10mm
+\usepackage[top=20mm, bottom=20mm, left=20mm, right=10mm]{geometry}
+
+% --- Typography: Times New Roman 12pt with 1.5 Line Spacing ---
+\usepackage{mathptmx}
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Paragraph Formatting: Justified, 1.25cm first-line indent, zero parskip ---
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0pt}
+
+% --- Core Academic & Layout Packages ---
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{graphicx}
+\usepackage{courier}
+\usepackage{listings}
+\usepackage{amsmath,amssymb}
+\usepackage{fancyhdr}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+
+% --- Header and Footer Settings: Page Number Bottom-Center ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\fontsize{12pt}{14pt}\selectfont\thepage}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% --- Counters: Equations, Figures, Tables numbered sequentially per section ---
+\numberwithin{equation}{section}
+\numberwithin{figure}{section}
+\numberwithin{table}{section}
+
+% --- Section & Chapter Headings Styling ---
+% Main Chapter Title: New page, uppercase, Times New Roman, Bold, 13pt, Centered
+\titleformat{\section}[block]
+  {\clearpage\centering\fontsize{13pt}{16pt}\bfseries\MakeUppercase}
+  {\thesection}{1em}{}
+\titlespacing*{\section}{0pt}{0pt}{14pt}
+
+% Subchapter Title: Times New Roman, Bold, 12pt, left-aligned, indented by 1.25cm
+\titleformat{\subsection}[block]
+  {\fontsize{12pt}{15pt}\bfseries}
+  {\hspace*{1.25cm}\thesubsection}{1em}{}
+\titlespacing*{\subsection}{0pt}{14pt}{8pt}
+
+% Sub-subchapter Title: Times New Roman, Bold, 12pt, left-aligned, indented by 1.25cm
+\titleformat{\subsubsection}[block]
+  {\fontsize{12pt}{15pt}\bfseries}
+  {\hspace*{1.25cm}\thesubsubsection}{1em}{}
+\titlespacing*{\subsubsection}{0pt}{12pt}{6pt}
+
+% Unnumbered Sections (Introduction, Conclusions, References): 13pt Bold Centered Uppercase
+\newcommand{\unnumberedsection}[1]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{section}{#1}
+  \begin{center}
+    {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{#1}\par}
+  \end{center}
+  \vspace{14pt}
+}
+
+% --- Caption Styling ---
+% Figures: centered, bold, format "Figure X.Y -- Title" (no period at end)
+\captionsetup[figure]{
+  labelfont=bf,
+  textfont=bf,
+  labelsep=endash,
+  justification=centering,
+  position=bottom,
+  skip=8pt
+}
+
+% Tables: aligned right above table, normal font, format "Table X.Y -- Title"
+\captionsetup[table]{
+  labelfont=normalfont,
+  textfont=normalfont,
+  labelsep=endash,
+  justification=raggedleft,
+  singlelinecheck=false,
+  position=top,
+  skip=6pt
+}
+
+% Table content setup: 11pt font size with single line spacing
+\newcommand{\tablesetup}{\fontsize{11pt}{13pt}\selectfont\singlespacing}
+
+% --- Source Code Styling (Courier New, 10pt, single line spacing) ---
+\lstset{
+  basicstyle=\fontsize{10pt}{12pt}\selectfont\ttfamily,
+  breaklines=true,
+  breakatwhitespace=false,
+  showstringspaces=false,
+  frame=single,
+  framerule=0.5pt,
+  rulecolor=\color{black},
+  numbers=none,
+  tabsize=2,
+  captionpos=b,
+  lineskip=0pt
+}
+
+% --- Custom Figure Placeholder Box ---
+% #1: Identifier (safe text)
+% #2: Description
+% #3: Caption
+% #4: Filename hint
+\newcommand{\imageplaceholder}[4]{%
+  \begin{figure}[htbp]
+    \centering
+    \fbox{%
+      \begin{minipage}{0.92\textwidth}
+        \centering
+        \vspace{0.6cm}
+        {\fontsize{11pt}{13pt}\selectfont\bfseries [SCREENSHOT / IMAGE PLACEHOLDER: #1]}\\[0.3cm]
+        {\fontsize{10pt}{12pt}\selectfont\itshape Description: #2}\\[0.2cm]
+        {\fontsize{9pt}{11pt}\selectfont\itshape Recommended graphic asset: \texttt{images/\detokenize{#4}}}
+        \vspace{0.6cm}
+      \end{minipage}%
+    }
+    \caption{#3}
+    \label{fig:#1}
+  \end{figure}
+}
+
+% --- Custom Appendix Header ---
+\newcommand{\startappendix}[2]{%
+  \clearpage
+  \phantomsection
+  \addcontentsline{toc}{section}{#1 -- #2}
+  \begin{center}
+    {\fontsize{13pt}{16pt}\bfseries #1\par}
+    \vspace{4pt}
+    {\fontsize{13pt}{16pt}\bfseries #2\par}
+  \end{center}
+  \vspace{14pt}
+}
+
+% --- Simple List Item Style (Dashes as per guidelines) ---
+\renewcommand{\labelitemi}{--}
 
 \begin{document}
-
-{\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}
-  >{\centering\arraybackslash}p{(\linewidth - 2\tabcolsep) * \real{0.1942}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 2\tabcolsep) * \real{0.8058}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\centering
-\includegraphics[width=1.19028in,height=1.02569in,alt={Imagine similară}]{images/media/image1.jpeg}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{Technical University of Moldova}
-
-\textbf{Faculty of Computers, Informatics, and Microelectronics}
-
-\textbf{Department of Software Engineering and Automation}
-
-\textbf{Software Engineering Study Programme}
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-\end{longtable}
-}
-
-\textbf{INTERNSHIP REPORT}
-
-\textbf{Project title}
-
-\textbf{Team No. \ldots{}}
-
-\begin{quote}
-Team members:
-\end{quote}
-
-{\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1810}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.2923}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.1586}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\raggedright
-Student 1:
-
-Student 2:
-
-Student 3. etc.
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
-Name Surname, group
-
-Name Surname, group
-
-Name Surname, group
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
-*Signature
-
-*Signature
-
-*Signature
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-Mentor: & Name Surname, title & Signature \\
-\end{longtable}
-}
-
-\textbf{*}By signing the cover page of this report, each student
-confirms their active involvement in both the development of the project
-and the writing of the report. Students who did not contribute
-meaningfully are not permitted to sign.
-
-Submission date: {[}DD/MM/YYYY{]}
-
-\textbf{Chisinau, 2025}
-
-To ensure a clear, well-structured, and professional final paper,
-standard formatting rules must be followed. These guidelines help
-organize the content in line with academic requirements and make the
-thesis easier to read and evaluate. Proper formatting also reflects
-precision and responsibility in academic work.
-
-\begin{itemize}
-\item
-  The report must be written in an impersonal style (the use of
-  first-person pronouns is not permitted).
-\item
-  The main body text shall be formatted as follows: \textbf{Times New
-  Roman, 12 pt., 1.5 line spacing, justified alignment, black font
-  color}.
-\item
-  Page margins (without borders or additional inscriptions): \textbf{Top
-  -- 20 mm; Bottom -- 20 mm; Left -- 20 mm; Right -- 10 mm}.
-\item
-  Chapters and subchapters shall be numbered with Arabic numerals (e.g.,
-  1, 2, 3; or 1.1, 1.2; or 1.1.1, 1.1.2). Up to three levels are
-  accepted. The Introduction and Conclusions are not numbered and should
-  not include the word Chapter.
-\item
-  Source code must be formatted in Courier New, 10 pt., single spacing.
-  If the code exceeds 50\% of a page, it must be placed in an appendix,
-  with an appropriate reference in the main text.
-\item
-  Each chapter title must begin on a new page, formatted in uppercase,
-  Times New Roman, bold, 13 pt., centered.
-\item
-  Subchapter titles must be formatted in Times New Roman, bold, 12 pt.,
-  left-aligned.
-\item
-  Chapter and subchapter titles must not appear at the bottom of a page.
-\item
-  Paragraphs shall be formatted as follows: justified alignment, with
-  the first line indented 1.25 cm.
-\item
-  The spacing between a chapter or subchapter title and the subsequent
-  text shall not exceed one line interval.
-\item
-  A subchapter must cover a minimum of one full page.
-\item
-  Page numbering shall be placed at the bottom center of each page. The
-  title page and preliminary pages before the Introduction are included
-  in the total page count but shall not display page numbers.
-\item
-  The report must be printed on A4 paper, single-sided.
-\item
-  The text must use clear and precise language, presenting information
-  in a direct, intelligible, and logically structured manner. The report
-  must reflect the authors' original contribution. All bibliographic
-  sources must be cited in-text and listed in the bibliography.
-\end{itemize}
-
-{\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}
-  >{\raggedright\arraybackslash}p{(\linewidth - 2\tabcolsep) * \real{0.1685}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 2\tabcolsep) * \real{0.8315}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\raggedright
-\textbf{Abstract}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
-A concise summary of your entire report, including:
-
-\begin{itemize}
-\item
-  the problem addressed
-\item
-  the proposed solution concept
-\item
-  main findings and outcomes so far
-\item
-  objectives, methods, and anticipated impact
-\end{itemize}
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-\textbf{Introduction} & \begin{minipage}[t]{\linewidth}\raggedright
-\begin{itemize}
-\item
-  Context and background of the problem
-\item
-  Motivation and relevance of the project
-\item
-  Potential impact on the target audience/market
-\item
-  Brief outline of the report structure
-\end{itemize}
-\end{minipage} \\
-\textbf{Domain Analysis} & \begin{minipage}[t]{\linewidth}\raggedright
-\begin{itemize}
-\item
-  Problem Overview: Define the issue, its significance, and the broader
-  context.
-\item
-  Target Audience: Identify who will use the application, their needs,
-  and potential benefits. Use data (interviews, surveys, questionnaires)
-  where possible.
-\item
-  Solution Concept: Describe the application, its purpose, and main
-  features.
-\item
-  Market Research: Compare your idea with existing solutions, identify
-  gaps, and explain how your project improves or innovates.
-\end{itemize}
-\end{minipage} \\
-\textbf{System Design} & \begin{minipage}[t]{\linewidth}\raggedright
-\begin{itemize}
-\item
-  \textbf{Technical Requirements}
-
-  \begin{itemize}
-  \item
-    Functional Requirements: core features and operations.
-  \item
-    Non-Functional Requirements: performance, usability, and security
-    standards.
-  \end{itemize}
-\item
-  \textbf{Behavioral Modeling (UML)}
-
-  \begin{itemize}
-  \item
-    Use Case Diagrams (system-user interactions).
-  \item
-    Sequence Diagrams (order of operations).
-  \end{itemize}
-\item
-  \textbf{Structural Modeling (UML)}
-
-  \begin{itemize}
-  \item
-    Class or Component Diagrams (system architecture and relationships).
-  \end{itemize}
-\end{itemize}
-\end{minipage} \\
-\textbf{Conclusions} & \begin{minipage}[t]{\linewidth}\raggedright
-\begin{itemize}
-\item
-  Summary of findings from Domain Analysis and System Design
-\item
-  Achievements and challenges addressed so far
-\item
-  Next steps for further development in the PBL course
-\item
-  Early considerations for implementation
-\end{itemize}
-\end{minipage} \\
-\textbf{Bibliography} & \begin{minipage}[t]{\linewidth}\raggedright
-\begin{itemize}
-\item
-  Include all sources cited in the report (articles, books, research
-  papers, websites)
-\end{itemize}
-\end{minipage} \\
-\textbf{Final notes} & \begin{minipage}[t]{\linewidth}\raggedright
-\begin{itemize}
-\item
-  This template is flexible; adapt it to your project needs while
-  keeping the \textbf{key sections intact}.
-\item
-  Students may use the \textbf{LaTeX template provided}, already adapted
-  to the required standards. This is optional, but highly recommended
-  for those wishing to learn a professional tool for academic writing.
-\item
-  Total length: \textbf{25--30 pages}.
-\end{itemize}
-\end{minipage} \\
-\end{longtable}
-}
-
-\textbf{\hfill\break
-}
-
-\textbf{Enumeration in context}
-
-If the text includes simple lists, they are marked with dashes. Each
-item begins with a lowercase letter, and each line ends with a
-semicolon; a period is placed after the final item.
-
-\emph{Example:}
-
-\begin{itemize}
-\item
-  \ldots.. one;
-\item
-  \ldots.. two;
-\item
-  \ldots.. three.
-\end{itemize}
-
-If the list is referenced in the text, enumeration is done using
-lowercase Latin letters followed by a closing parenthesis.
-
-If multiple levels of enumeration are needed, lowercase \emph{Latin
-letters} followed by a closing parenthesis are used for the first level,
-and \emph{Arabic numerals} with a closing parenthesis are used for the
-secondary level.
-
-\emph{Example:}
-
-\begin{enumerate}
-\def\labelenumi{\alph{enumi})}
-\item
-  \_\_\_\_\_\_\_\_\_\_\_\_\_\_;
-\item
-  \_\_\_\_\_\_\_\_\_\_\_\_\_\_;
-\end{enumerate}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi})}
-\item
-  \_\_\_\_\_\_\_\_\_\_\_\_\_\_;
-\end{enumerate}
-
-\begin{itemize}
-\item
-  \_\_\_\_\_\_\_\_\_\_\_;
-\item
-  \_\_\_\_\_\_\_\_\_\_\_;
-\end{itemize}
-
-\begin{enumerate}
-\def\labelenumi{\arabic{enumi})}
-\setcounter{enumi}{1}
-\item
-  \_\_\_\_\_\_\_\_\_\_\_\_\_\_;
-\end{enumerate}
-
-\begin{enumerate}
-\def\labelenumi{\alph{enumi})}
-\setcounter{enumi}{2}
-\item
-  \_\_\_\_\_\_\_\_\_\_\_\_\_\_.
-\end{enumerate}
-
-Use of any other symbols is prohibited.
-
-\emph{Each item in a list must not exceed one sentence in length.}
-
-\textbf{Figures}
-
-Figures must be numbered sequentially within each chapter: the first
-digit indicates the chapter number, and the second digit represents the
-order of the figure within that chapter, formatted as ``Figure 1.1''.
-
-Both the word ``Figure 1.1'' and its title should be centered on the
-page, written in bold, without a period at the end.
-
-If a figure takes more than 75\% of the page's space, it must be
-included in an appendix, with a reference made to it in the main text.
-
-Figures may be formatted in landscape orientation if necessary, provided
-they are listed in the Appendix and referenced in the main body of the
-thesis.
-
-Every figure should be cited within the text and placed immediately
-following its first reference.
-
-\emph{Example:}
-
-According to Figure 1.1...
-
-\textbf{Figure 1.1 -- Figure title}
-
-Figures are numbered sequentially regardless of subchapters. Figure
-titles must not be positioned at the bottom of the page.
-
-\textbf{Tables}
-
-Tables are numbered consecutively within each chapter, where the first
-number represents the chapter and the second number indicates the
-table's sequence in that chapter, for example, ``Table 1.1.''
-
-Table titles are positioned above the tables and aligned to the right.
-The content within the tables is formatted using an 11pt font size with
-single line spacing.
-
-Tables may be presented in landscape orientation if necessary, provided
-they are included in the Appendix and referenced accordingly in the
-text.
-
-If a table takes up more than 75\% of a page, it should be placed in an
-appendix, with a corresponding reference made in the main text.
-
-Every table must be cited in the text, and the table itself should
-appear immediately following its first citation.
-
-\emph{Example:}
-
-As shown in Table 1.1, it is recommended that...
-
-\textbf{Table 1.1 -- Table title}
-
-{\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}
-  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1638}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1539}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1638}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.1638}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\centering
-\textbf{A}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{B}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{C}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{D}
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-123 & 125 & 255411 & 553321 \\
-123569 & 2548 & 123355 & 1233 \\
-\end{longtable}
-}
-
-\textbf{Table continuation}
-
-When a table continues on the next page, the title should be placed on
-the right side, followed by the phrase ``Continuation of table 1.1'',
-also aligned to the right.
-
-\emph{Example:}
-
-\textbf{Continuation of table 1.1}
-
-{\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}
-  >{\centering\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2297}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2297}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2298}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 6\tabcolsep) * \real{0.2298}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\centering
-\textbf{A}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{B}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{C}
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\textbf{D}
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
-1235555 & 12588 & 25541188 & 55332188 \\
-1235696778 & 25488 & 12335588 & 123388 \\
-\end{longtable}
-}
-
-When a table extends over two or more pages, the column headers must be
-repeated at the top of each page.
-
-Table titles should not appear at the bottom of the page.
-
-\textbf{Formulas}
-
-Formulas must be numbered using \emph{Arabic numerals} in ascending
-order within each chapter.
-
-The first digit indicates the chapter number, while the second
-represents the formula\textquotesingle s sequence within that chapter
-(e.g., (1.1), (1.2), etc.). Formulas should be centered on the page,
-with the numbering placed at the right margin of the line.
-
-All symbols and coefficients used in a formula must be explained
-directly below it, in the same order as they appear in the expression.
-
-Each formula must be referenced in the main text, and it should be
-inserted immediately after its first citation.
-
-\emph{Example:}
-
-According to formula (1.1), the following calculation is performed...
-
-\emph{Ax+B=C (1.1)}
-
-\textbf{Appendices}
-
-All appendices must be referenced within the main body of the thesis or
-project and listed in sequential order (e.g., Appendix A, Appendix B,
-etc.). Each appendix should start on a new page and include a title
-centred beneath the heading ``Appendix.''
-
-Figures, tables, and formulas included in the appendices should be
-numbered using the corresponding appendix letter, for example: Figure
-A1, Table B1, Formula C1.
-
-If an appendix contains only one figure or table, its title may serve as
-the title of the appendix itself.
-
-\emph{Example:}
-
-\textbf{Appendix A}
-
-\textbf{Title of the Appendix}
-
-\textbf{Table A.1-Table title}
-
-{\def\LTcaptype{none} % do not increment counter
-\begin{longtable}[]{@{}
-  >{\centering\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3059}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3060}}
-  >{\raggedright\arraybackslash}p{(\linewidth - 4\tabcolsep) * \real{0.3060}}@{}}
-\toprule\noalign{}
-\begin{minipage}[b]{\linewidth}\centering
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\end{minipage} & \begin{minipage}[b]{\linewidth}\centering
-\end{minipage} \\
-\midrule\noalign{}
-\endhead
-\bottomrule\noalign{}
-\endlastfoot
+\hypersetup{pageanchor=false}
+
+% ==============================================================================
+% COVER PAGE (Title page excluded from pagination)
+% ==============================================================================
+\begin{titlepage}
+\begin{center}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} c m{0.78\textwidth} @{}}
+  \includegraphics[width=2.5cm,height=2.2cm,keepaspectratio]{images/media/image1.jpeg} & 
+  \centering
+  {\fontsize{12pt}{14pt}\selectfont\bfseries TECHNICAL UNIVERSITY OF MOLDOVA}\\[0.15cm]
+  {\fontsize{11pt}{13pt}\selectfont\bfseries Faculty of Computers, Informatics, and Microelectronics}\\[0.15cm]
+  {\fontsize{11pt}{13pt}\selectfont\bfseries Department of Software Engineering and Automation}\\[0.15cm]
+  {\fontsize{11pt}{13pt}\selectfont\bfseries Software Engineering Study Programme}
+\end{tabular*}
+
+\vspace{2.5cm}
+
+{\fontsize{14pt}{16pt}\selectfont\bfseries INTERNSHIP REPORT}\\[0.4cm]
+{\fontsize{13pt}{16pt}\selectfont\bfseries SECRETSHARE: ZERO-TRUST EPHEMERAL SECRET SHARING PLATFORM WITH END-TO-END HYBRID ENCRYPTION}\\[0.3cm]
+{\fontsize{12pt}{14pt}\selectfont\bfseries Software Engineering Internship Project}
+
+\vspace{2.5cm}
+
+\begin{flushleft}
+\begin{tabular}{p{0.32\textwidth} p{0.38\textwidth} p{0.22\textwidth}}
+\textbf{Team Members:} & & \\
+Student: & Ionuț Șoimu, FAF-221 & *Signature \\
 & & \\
-\end{longtable}
+\textbf{Mentor:} & & \\
+University Internship Mentor: & From internship contract & *Signature \\
+\end{tabular}
+\end{flushleft}
+
+\vfill
+
+\begin{flushleft}
+\fontsize{9pt}{11pt}\selectfont
+*By signing the cover page of this report, each student confirms their active involvement in both the development of the project and the writing of the report. Students who did not contribute meaningfully are not permitted to sign.
+\end{flushleft}
+
+\vspace{0.3cm}
+{\fontsize{11pt}{13pt}\selectfont Submission date: 23 / 09 / 2026}\\[0.2cm]
+{\fontsize{12pt}{14pt}\selectfont\bfseries Chisinau, 2026}
+\end{center}
+\end{titlepage}
+
+% ==============================================================================
+% PRELIMINARY PAGES (Counted in total page count, but numbers not displayed)
+% ==============================================================================
+\pagestyle{empty}
+
+% --- Table of Contents ---
+\clearpage
+\begin{center}
+  {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{TABLE OF CONTENTS}\par}
+\end{center}
+\vspace{14pt}
+{
+  \setstretch{1.2}
+  \tableofcontents
 }
 
-\includegraphics[width=1.04735in,height=1.04735in]{images/media/image2.png}
+% --- List of Abbreviations ---
+\clearpage
+\begin{center}
+  {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{LIST OF ABBREVIATIONS}\par}
+\end{center}
+\vspace{14pt}
+\noindent
+\begin{tabular}{p{0.22\textwidth} p{0.72\textwidth}}
+\textbf{AEAD} & Authenticated Encryption with Associated Data \\
+\textbf{AES} & Advanced Encryption Standard \\
+\textbf{API} & Application Programming Interface \\
+\textbf{ASGI} & Asynchronous Server Gateway Interface \\
+\textbf{AUD} & Security Audit Invariant Standard \\
+\textbf{CA} & Certificate Authority \\
+\textbf{CEK} & Content Encryption Key \\
+\textbf{CI/CD} & Continuous Integration / Continuous Deployment \\
+\textbf{CIDR} & Classless Inter-Domain Routing \\
+\textbf{CSP} & Content Security Policy \\
+\textbf{CSRF} & Cross-Site Request Forgery \\
+\textbf{DBMS} & Database Management System \\
+\textbf{DOM} & Document Object Model \\
+\textbf{E2E} & End-to-End (Encryption) \\
+\textbf{ECDH} & Elliptic Curve Diffie--Hellman \\
+\textbf{GCM} & Galois/Counter Mode \\
+\textbf{HTTP} & Hypertext Transfer Protocol \\
+\textbf{HTTPS} & Hypertext Transfer Protocol Secure \\
+\textbf{IAM} & Identity and Access Management \\
+\textbf{IETF} & Internet Engineering Task Force \\
+\textbf{IP} & Internet Protocol \\
+\textbf{IV} & Initialization Vector \\
+\textbf{JSON} & JavaScript Object Notation \\
+\textbf{JWT} & JSON Web Token \\
+\textbf{mTLS} & Mutual Transport Layer Security \\
+\textbf{NIST} & National Institute of Standards and Technology \\
+\textbf{OIDC} & OpenID Connect \\
+\textbf{ORM} & Object-Relational Mapping \\
+\textbf{PKCE} & Proof Key for Code Exchange \\
+\textbf{REST} & Representational State Transfer \\
+\textbf{RFC} & Request for Comments \\
+\textbf{RSA} & Rivest--Shamir--Adleman Cryptosystem \\
+\textbf{RSA-OAEP} & RSA Optimal Asymmetric Encryption Padding \\
+\textbf{SHA} & Secure Hash Algorithm \\
+\textbf{SPKI} & Subject Public Key Info \\
+\textbf{SQL} & Structured Query Language \\
+\textbf{SSH} & Secure Shell \\
+\textbf{SRE} & Site Reliability Engineering \\
+\textbf{TLS} & Transport Layer Security \\
+\textbf{TTL} & Time-to-Live \\
+\textbf{UI} & User Interface \\
+\textbf{UML} & Unified Modeling Language \\
+\textbf{URI} & Uniform Resource Identifier \\
+\textbf{URL} & Uniform Resource Locator \\
+\textbf{UUID} & Universally Unique Identifier \\
+\textbf{W3C} & World Wide Web Consortium \\
+\textbf{XSS} & Cross-Site Scripting \\
+\end{tabular}
 
-\textbf{Figure A.1- Figure title}
+% --- Abstract ---
+\clearpage
+\begin{center}
+  {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{ABSTRACT}\par}
+\end{center}
+\vspace{14pt}
+\noindent
+This internship report presents the design, theoretical foundations, architectural specification, implementation, and empirical verification of \textbf{SecretShare}, an enterprise-grade, zero-trust, ephemeral secret-sharing platform. The primary objective of the project is to resolve the acute security deficiencies of existing secret-transmission mechanisms, where confidential credentials, database passphrases, API keys, and private certificates are routinely leaked through persistent communication channels, proxy access logs, and centralized application databases. 
 
-\textbf{References}
+The developed solution establishes a rigorous zero-knowledge paradigm through client-side hybrid cryptography. Prior to network dispatch, plaintext payloads are encrypted in the sender user agent using symmetric AES-256-GCM authenticated encryption under an ephemeral content encryption key. This symmetric key is subsequently encapsulated using asymmetric RSA-OAEP 2048-bit encryption for every active cryptographic device registered by the intended recipient. Identity assertion is strictly governed by OpenID Connect and OAuth2 protocols integrated with Keycloak utilizing Proof Key for Code Exchange (PKCE). Ephemeral datastore operations are mediated by high-throughput Redis instances with automated, atomic single-delivery guarantees enforced by custom Lua scripts that eradicate race conditions during read operations. Furthermore, the architecture complies with strict audit invariants (AUD-6), ensuring that payload identifiers are entirely excluded from uniform resource locator paths and query parameters, eliminating transit leakage across intermediary proxies and web server logs. Internal microservice communications, including PostgreSQL audit storage and Redis cache transactions, are hardened through automated Transport Layer Security (TLS) certificate authority provisioning. Continuous integration workflows automate security audits, end-to-end integration tests, and ephemeral preview deployments on dedicated subdomains via Tailscale HTTPS.
 
-The list of references must follow the order in which the sources are
-first cited in the text. Each citation is marked using square brackets:
-for example, {[}1{]}, and corresponds to a full entry in the reference
-list. This citation style allows the reader to easily identify the
-original source of a quoted idea or statement.
+\vspace{0.8cm}
+\noindent
+\textbf{Keywords:} Ephemeral Secret Sharing, End-to-End Encryption, Zero-Knowledge Architecture, RSA-OAEP, AES-256-GCM, OAuth2/OIDC, Atomic Lua Scripting, Traefik Ingress.
 
-Numbers assigned to sources remain consistent throughout the document.
-If only a specific section or page is referenced, the page number should
-be included in the citation, e.g., {[}8, p. 231{]}.
+% ==============================================================================
+% MAIN BODY (Pagination begins here, bottom center)
+% ==============================================================================
+\clearpage
+\hypersetup{pageanchor=true}
+\pagestyle{fancy}
+\setcounter{page}{5}
 
-The bibliography in the thesis must be compiled using the Zotero
-application (\url{https://www.zotero.org/}), following the IEEE citation
-style.
+% ------------------------------------------------------------------------------
+% INTRODUCTION
+% ------------------------------------------------------------------------------
+\unnumberedsection{INTRODUCTION}
+
+In contemporary distributed computing environments, modern software engineering workflows demand frequent exchange of highly sensitive digital assets. Software developers, system operators, devops specialists, and cloud architects constantly transmit database credentials, private cryptographic keys, temporary infrastructure access tokens, and confidential application parameters. Despite the widespread adoption of secure transport protocols, the mechanisms employed for ad-hoc credential transmission remain predominantly insecure. Practical industry surveys reveal that sensitive credentials are routinely dispatched via corporate chat platforms, email threads, issue management trackers, and customer relationship management ticketing systems. 
+
+These persistent communication channels fundamentally violate the principle of least privilege and data minimization. Messages stored within email repositories and enterprise messaging backends persist indefinitely, multiplying the attack surface across distributed cloud backups, employee workstations, and third-party SaaS infrastructure. A compromise of any singular administrative account or audit log repository frequently exposes a historical archive of active system credentials. Consequently, ephemeral secret-sharing systems—frequently designated as ``burn-after-reading'' services—have emerged as an essential defensive countermeasure. By enforcing strict temporal time-to-live restrictions and guaranteeing immediate destruction upon first consumption, ephemeral sharing restricts the exposure window of confidential tokens to the bare minimum duration required for operational handoff.
+
+Nevertheless, an analysis of mainstream commercial and open-source ephemeral sharing utilities reveals substantial architectural vulnerabilities. Conventional implementations rely upon centralized server-side trust models. In such architectures, plaintext credentials are submitted directly to a remote server, which undertakes the responsibility of encrypting and storing the payload. In this scenario, the hosting infrastructure retains total visibility over the plaintext content, rendering the system vulnerable to memory scraping, database exfiltration, insider threats, and subpoena interception. Even among platforms claiming client-side encryption, grave architectural omissions persist: secret identifiers are routinely encoded directly within uniform resource locator (URL) paths or query strings. Because web proxies, load balancers, content delivery networks, and browser histories systematically record full HTTP request lines, secret identifiers are permanently leaked into infrastructure access logs. An adversary with passive read access to proxy logs can readily replay unconsumed identifiers, thereby intercepting sensitive credentials before the legitimate recipient accesses them.
+
+The core motivation of this software engineering internship project is the development and rigorous implementation of \textbf{SecretShare}, an open-source, resilient, end-to-end encrypted secret-sharing ecosystem founded upon a strict zero-trust, zero-knowledge threat model. The primary objective is the realization of an application architecture wherein the centralized application server acts as a blind, untrusted storage broker. Under this architectural paradigm, cryptographic operations occur exclusively within client user agents utilizing the standardized W3C Web Crypto API. Cryptographic payloads are addressed to authenticated organizational identities, preventing unauthorized consumption even in the event of total transport-layer interception.
+
+To accomplish this objective, the project fulfills the following engineering tasks:
+\begin{itemize}
+  \item design of an asynchronous microservice backend utilizing FastAPI, implementing strict body-based parameter verification to completely prevent credential leakage in HTTP request lines;
+  \item implementation of a browser-based hybrid encryption engine combining asymmetric RSA-OAEP 2048-bit key wrapping with symmetric AES-256-GCM authenticated payload encryption;
+  \item integration of an enterprise identity provider (Keycloak) supporting OpenID Connect and OAuth2 with Proof Key for Code Exchange to authenticate recipient devices and authorize secret access;
+  \item engineering of an atomic, single-delivery destruction engine executing inside an in-memory Redis instance via Lua scripting to prevent race conditions during concurrent access;
+  \item establishment of automated mutual TLS datastore encryption and turnkey container orchestration via Docker Compose and Traefik edge routing;
+  \item development of an automated continuous integration and continuous deployment pipeline providing ephemeral pull-request previews with valid HTTPS subdomains via Tailscale.
+\end{itemize}
+
+The structure of this report is organized systematically into three principal chapters, followed by general conclusions and technical appendices. Chapter 1 provides a comprehensive domain analysis, evaluating the threat landscape, target audience, technical problem formulation, and comparative market alternatives. Chapter 2 details the architectural specification and system design, encompassing functional and non-functional requirements, edge routing topology, behavioral sequence modeling, and mathematical cryptographic specifications. Chapter 3 examines the practical implementation and empirical verification of the frontend, backend, ephemeral storage engine, automated test suites, and continuous deployment workflows.
+
+% ------------------------------------------------------------------------------
+% CHAPTER 1: DOMAIN ANALYSIS
+% ------------------------------------------------------------------------------
+\section{Domain Analysis}
+
+The development of secure ephemeral sharing software requires a rigorous exploration of cryptographic principles, contemporary web architectures, operational threat models, and real-world administrative user behaviors. This chapter presents an in-depth investigation into the operational challenges of sensitive data exchange, establishes the threat model under which the system operates, identifies key stakeholder personas, defines the core value proposition of the proposed platform, and conducts an extensive comparative study of existing industry alternatives.
+
+\subsection{Problem Overview and Security Threat Landscape}
+
+In modern software development and DevOps practices, credential exchange is an inevitable daily operational requirement. During onboarding procedures, emergency incident remediations, database migrations, and manual configuration overrides, engineers are compelled to transmit high-value confidential data. This confidential data includes database connection strings, root private keys, cloud service account credentials, and third-party webhook signing secrets. Historically, these data items have been conveyed through general-purpose corporate communication software such as Slack, Microsoft Teams, Discord, Jira tickets, and corporate email systems.
+
+The systemic danger of utilizing persistent communication channels lies in the durability and proliferation of the transmitted data. Typical enterprise chat platforms and email servers maintain continuous database backups and unencrypted internal logs. Once a credential is typed into a messaging channel, it is distributed across multiple message caching layers, mobile device notifications, and search indexing engines. The credential remains discoverable indefinitely. Statistical evaluations of corporate security incidents indicate that a substantial percentage of lateral network compromises originate from compromised read-only access to historical Slack or Jira workspaces, where stale passwords, access tokens, and administrative credentials remain unprotected.
+
+Furthermore, traditional web applications that attempt to solve this challenge through ``one-time link'' services introduce severe architectural design flaws. The most prominent flaws identified in existing solutions include:
+\begin{itemize}
+  \item centralized server-side trust: the remote server generates and holds decryption keys, creating an attractive single point of compromise for malicious actors or untrusted server administrators;
+  \item unauthenticated secret retrieval: links can be opened by anyone possessing the URL, meaning that accidental misrouting, clipboard theft, or shoulder surfing leads to immediate credential compromise;
+  \item request-line identifier leakage: secret identifiers are placed in URL paths (such as \texttt{/secret/7a8f9b...}) or query parameters, causing automated logging by edge reverse proxies, corporate web filters, and browser navigation histories;
+  \item destructive race conditions: simultaneous retrieval requests by automated link-crawlers (such as enterprise antivirus crawlers or chat link-unfurl bots) trigger premature secret deletion before the intended human recipient accesses the data.
+\end{itemize}
+
+To establish a resilient countermeasure, an application must enforce an absolute zero-knowledge paradigm. The storage backend must remain entirely blind to the contents of the secret, the encryption keys must never touch the server filesystem or memory space, and the secret identifier must be shielded from transparent transport-layer access logs.
+
+\subsection{Target Audience and Stakeholder Analysis}
+
+The operational scope of the SecretShare platform encompasses multiple professional profiles within organizational engineering and administrative ecosystems. Understanding the workflow requirements and risk tolerance of each stakeholder group is essential for establishing viable system ergonomics without degrading cryptographic security.
+
+\textbf{1. DevOps and Site Reliability Engineering Teams.} Site reliability engineers routinely provision cloud infrastructure, rotate database credentials, and manage TLS certificates. Their primary requirement is an ultra-fast, scriptable, and turnkey mechanism to dispatch temporary infrastructure credentials to developers without manual GPG key exchange overhead. For these users, automated expiration, strict payload limits, and command-line compatibility represent high-priority operational requirements.
+
+\textbf{2. Software Development Teams.} Distributed engineering teams require cross-platform credential handoffs across diverse operating environments (Linux, macOS, Windows). Developers require frictionless authentication via central enterprise accounts (single sign-on) and intuitive web user interfaces that prevent accidental key mismanagement. The platform must operate seamlessly within standard web browsers without requiring local software installations or custom cryptographic plugin configurations.
+
+\textbf{3. Corporate Information Security and Audit Teams.} Security officers and compliance auditors are tasked with enforcing regulatory standards (e.g., SOC 2, ISO/IEC 27001, GDPR). Their primary operational requirement is the elimination of credential persistence in collaborative software and the enforcement of immutable audit logging. Auditors require clear traceability regarding who created a secret, who retrieved it, the precise timestamp of retrieval, and the verified cryptographic proof that the secret payload was immediately purged from memory upon consumption.
+
+\textbf{4. External Contractors and Support Personnel.} Organizations frequently interface with external vendors and temporary contractors who do not possess corporate Active Directory or Google Workspace accounts. The platform must accommodate structured authorization flows while guaranteeing that credentials provisioned to external contractors expire automatically if not claimed within tight operational windows.
+
+\subsection{Solution Concept and Core Value Proposition}
+
+To address the documented threat landscape and satisfy stakeholder requirements, \textbf{SecretShare} is architected as an end-to-end encrypted, zero-trust ephemeral secret delivery platform. The fundamental premise of the solution is that the central server is treated as a potentially compromised, untrusted entity. All confidentiality guarantees are enforced at the network edge inside user web clients.
+
+The conceptual architecture of the solution is founded upon four core engineering pillars:
+\begin{itemize}
+  \item client-side hybrid asymmetric/symmetric cryptography: the platform implements the W3C Web Crypto API directly within the browser document object model. Secrets are encrypted using symmetric AES-256-GCM under an ephemeral random key, which is subsequently encapsulated using asymmetric RSA-OAEP for the verified public keys of the recipient registered devices;
+  \item zero-knowledge server blindness: the backend API accepts and persists only opaque ciphertext envelopes. The server possesses no mathematical capability to decrypt, inspect, or tamper with the payload;
+  \item atomic single-delivery enforcement: secret destruction is executed within Redis using an atomic Lua script that simultaneously validates caller identity and executes instantaneous memory deletion, preventing duplicate reads and race-condition vulnerabilities;
+  \item access log leak avoidance (Rule AUD-6): in strict adherence to audit rule AUD-6, secret payload identifiers are prohibited from appearing in HTTP URL paths or query strings during backend communication, eliminating request-line exposure across server access logs and proxy caches.
+\end{itemize}
+
+As shown in Table 1.1, the operational life cycle of a secret transitions through discrete, cryptographically verified states from initialization to irreversible obliteration.
+
+\begin{table}[htbp]
+\tablesetup
+\caption{Secret Lifecycle State Transition Matrix}
+\label{tab:lifecycle_states}
+\begin{tabularx}{\textwidth}{l p{0.22\textwidth} p{0.32\textwidth} X}
+\toprule
+\textbf{State} & \textbf{Storage Location} & \textbf{Security Guarantee} & \textbf{Transition Trigger} \\
+\midrule
+Uninitialized & Browser Memory & Ephemeral plaintext in DOM & User submits input form \\
+Encrypted & Redis Memory & Opaque ciphertext with TTL & Creation via backend API \\
+Inspected & Redis Memory & Non-destructive existence check & Call to existence endpoint \\
+Burned & Obliterated & Atomically purged via Lua script & Recipient invokes reveal endpoint \\
+Expired & Obliterated & Automated eviction via Redis TTL & Expiration timer elapses \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Market Research and Comparative Analysis}
+
+To substantiate the architectural innovation of SecretShare, an exhaustive comparative evaluation of contemporary credential sharing tools was performed. The evaluation benchmarks SecretShare against five leading commercial and open-source platforms: HashiCorp Vault, Bitwarden Send, One-Time Secret, Privnote, and Yopass.
+
+\textbf{HashiCorp Vault} is an industry-standard secrets management platform designed for machine-to-machine identity and dynamic credential leasing. While Vault provides unmatched enterprise access control and encryption-at-rest capabilities, it is not optimized for ad-hoc, human-to-human secret sharing. Vault requires complex client configurations, specialized access permissions, and significant infrastructural overhead, rendering it impractical for rapid ad-hoc credential handoffs to external stakeholders.
+
+\textbf{Bitwarden Send} provides end-to-end encrypted text and file transmission integrated within the Bitwarden password management suite. Bitwarden Send leverages client-side encryption and supports password-protected retrieval. However, it requires an active Bitwarden subscription for full administrative control and does not support native integration with external self-hosted OpenID Connect identity providers for decentralized organizational access.
+
+\textbf{One-Time Secret and Privnote} represent widely utilized public web services offering burn-on-read links. Both platforms exhibit severe cryptographic deficiencies. Privnote performs all encryption server-side by default, exposing unencrypted credentials directly to the hosting provider. While One-Time Secret supports basic client-side passphrase protection, both services encode the secret identifier directly within the URL path. Consequently, links pasted into enterprise chat software or traversed across corporate proxy gateways are systematically inspected by automated web crawlers, frequently burning the secret before the recipient opens the link or leaking the identifier into access logs.
+
+\textbf{Yopass} is an open-source tool developed by Johan Haals that utilizes client-side encryption via OpenPGP or subtle crypto primitives, with temporary storage in Memcached or Redis. While Yopass provides client-side encryption and ephemeral storage, it lacks native enterprise identity integration: anyone possessing the decryption key fragment can decrypt the payload. Furthermore, Yopass does not support multiple recipient devices, multi-device key registries, or atomic recipient identity verification prior to secret consumption.
+
+As shown in Table 1.2, a systematic evaluation demonstrates that SecretShare uniquely synthesizes client-side hybrid asymmetric encryption, strict identity verification via OpenID Connect, atomic Lua-driven memory destruction, and access log leak mitigation.
+
+\begin{table}[htbp]
+\tablesetup
+\caption{Comparative Architectural Analysis of Secret Sharing Platforms}
+\label{tab:market_comparison}
+\begin{tabularx}{\textwidth}{l c c c c c c}
+\toprule
+\textbf{Evaluation Feature} & \textbf{Vault} & \textbf{Bitwarden} & \textbf{Privnote} & \textbf{One-Time} & \textbf{Yopass} & \textbf{SecretShare} \\
+\midrule
+Client-Side E2E Encryption & No & Yes & No & Partial & Yes & \textbf{Yes} \\
+Hybrid Multi-Device RSA/AES & No & No & No & No & No & \textbf{Yes} \\
+Zero-Trust Server Blindness & No & Yes & No & Partial & Yes & \textbf{Yes} \\
+OIDC Identity Gating (PKCE) & Yes & Proprietary & No & No & No & \textbf{Yes} \\
+Atomic Lua Single-Delivery & N/A & No & No & No & No & \textbf{Yes} \\
+AUD-6 Log Leak Protection & No & Partial & No & No & No & \textbf{Yes} \\
+Internal Datastore mTLS/TLS & Yes & Cloud & No & No & Optional & \textbf{Yes} \\
+Turnkey Self-Hosted Stack & Complex & Complex & No & Moderate & Moderate & \textbf{Yes} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The comparative analysis confirms that SecretShare effectively closes the critical gap between lightweight web utilities that lack cryptographic rigor and enterprise vaults that lack ergonomics for ephemeral human-to-human data exchange.
+
+% ------------------------------------------------------------------------------
+% CHAPTER 2: SYSTEM DESIGN AND ARCHITECTURE
+% ------------------------------------------------------------------------------
+\section{System Design and Architecture}
+
+Engineering a resilient, zero-knowledge software architecture necessitates strict separation of concerns, defensive networking boundaries, and mathematically sound cryptographic protocol design. This chapter defines the technical requirement specifications of SecretShare, details the multi-container ingress and service topology, constructs formal Unified Modeling Language (UML) behavioral models, and specifies the underlying cryptographic engineering principles.
+
+\subsection{Technical Requirements Specification}
+
+The system requirements are derived from the operational threat model and the necessity of preventing plaintext compromise under any failure mode. The specifications are categorized into functional requirements governing system behavior and non-functional requirements establishing security, reliability, and performance boundaries.
+
+\textbf{Functional Requirements (FR):}
+\begin{itemize}
+  \item \textbf{FR-01: Cryptographic Device Onboarding.} The system shall automatically generate a unique 2048-bit RSA-OAEP key pair within the authenticated user browser document object model upon initial login, persist the private key securely in local client-side storage (IndexedDB), and register the public key in Subject Public Key Info (SPKI) PEM format with the backend key registry.
+  \item \textbf{FR-02: Recipient Public Key Retrieval.} The system shall provide an endpoint enabling any user agent to query the active device public keys associated with a designated recipient username prior to encryption.
+  \item \textbf{FR-03: Client-Side Hybrid Encryption.} The web client shall generate an ephemeral 256-bit symmetric AES key, encrypt the plaintext payload using AES-256-GCM, wrap the AES key independently for each registered device key of the recipient using RSA-OAEP, and transmit the consolidated envelope to the backend.
+  \item \textbf{FR-04: Non-Destructive Existence Check.} The system shall provide an unauthenticated endpoint accepting a secret identifier within the HTTP request body to verify the existence and validity of a secret without triggering its destruction.
+  \item \textbf{FR-05: Authenticated Atomic Reveal.} The system shall provide a secure retrieval endpoint that authenticates the caller via Bearer token, verifies that the caller matches the recipient identity encapsulated in the envelope, atomically purges the envelope from storage, and returns the encrypted ciphertext payload.
+  \item \textbf{FR-06: Burn-After-Reading Warning Notice.} The user interface shall intercept secret links and manual retrieval inputs, conduct an existence pre-check, and render an explicit confirmation modal warning the user that retrieval will permanently destroy the secret from the server before executing the reveal operation.
+\end{itemize}
+
+\textbf{Non-Functional Requirements (NFR):}
+\begin{itemize}
+  \item \textbf{NFR-01: Zero-Knowledge Blindness.} The backend server and persistent storage engines shall possess no algorithmic mechanism to decrypt stored ciphertext. No plaintext secret data or raw symmetric encryption keys shall ever be received, processed, or logged by the server.
+  \item \textbf{NFR-02: Audit Invariant AUD-6 (No URL Identifiers).} The application shall strictly prohibit secret payload identifiers from appearing in HTTP URL paths or query strings across all backend API endpoints. Payload identifiers must be transmitted exclusively within JSON request bodies or client-side URL hash fragments.
+  \item \textbf{NFR-03: Single Delivery Guarantee.} The storage layer must guarantee strict single-delivery semantics. Concurrent requests targeting the same secret identifier must never both receive the secret payload.
+  \item \textbf{NFR-04: Maximum Payload Constraints.} The system shall enforce a strict payload boundary of 64 kilobytes (65,536 UTF-8 bytes) per secret envelope to prevent denial-of-service memory exhaustion on the Redis storage engine.
+  \item \textbf{NFR-05: Transport and Datastore Encryption.} All external network traffic must be encrypted via TLS 1.3/1.2 at the reverse proxy boundary. All internal network traffic between application microservices, the PostgreSQL database, and the Redis cache must be encrypted via automated internal TLS with mutual certificate authority validation.
+\end{itemize}
+
+\subsection{System Architecture and Ingress Routing}
+
+The infrastructural architecture of SecretShare is organized as a collection of decoupled, containerized services governed by the Traefik edge reverse proxy. The system isolates public traffic from internal datastore persistence networks through defined Docker network topologies.
+
+According to Figure 2.1, all inbound public traffic arrives at port 80/443 of the Traefik edge proxy. Traefik performs path-based request routing and SSL termination, dispatching traffic to the appropriate containerized microservice without exposing backend ports directly to the host network interface.
+
+\imageplaceholder{architecture-topology}{Architectural block diagram showing Traefik edge router, Next.js frontend, Keycloak IAM, FastAPI backend, and encrypted internal TLS datastores (PostgreSQL and Redis)}{System Architecture and Ingress Network Topology}{architecture_topology.png}
+
+The service topology comprises the following functional components:
+\begin{itemize}
+  \item \textbf{Traefik Edge Router:} serves as the single public gateway. It routes requests prefixed with \texttt{/api} to the FastAPI backend, requests prefixed with \texttt{/keycloak} to the Keycloak identity container, and all root traffic (\texttt{/}) to the Next.js frontend container;
+  \item \textbf{Next.js Web Frontend:} a lightweight React-based client application running NextAuth. It serves static client bundles and executes the Web Crypto hybrid cryptographic routines entirely within the user browser engine;
+  \item \textbf{FastAPI Backend Engine:} a high-performance asynchronous Python application implementing the RESTful API endpoints, request validation, rate limiting, and interaction with datastore drivers;
+  \item \textbf{Keycloak Identity and Access Management:} provides OpenID Connect and OAuth2 identity management, user registration, role mapping, and token issuance secured by Proof Key for Code Exchange (PKCE);
+  \item \textbf{PostgreSQL Relational Datastore:} persists relational data, specifically registered user identities, device public key registries (SPKI PEM format), and security audit logs;
+  \item \textbf{Redis In-Memory Datastore:} provides low-latency, volatile storage for active encrypted envelopes, utilizing native Time-to-Live (TTL) eviction and atomic Lua script execution;
+  \item \textbf{TLS-Init Service:} an automated bootstrap container that generates an internal self-signed Certificate Authority (CA) and issues X.509 server certificates for PostgreSQL and Redis prior to application startup.
+\end{itemize}
+
+As shown in Table 2.1, the ingress routing configuration cleanly partitions URL namespaces to ensure strict isolation between services.
+
+\begin{table}[htbp]
+\tablesetup
+\caption{Traefik Edge Routing and Service Mapping}
+\label{tab:routing_mapping}
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{Path Prefix} & \textbf{Target Container} & \textbf{Port} & \textbf{Primary Operational Purpose} \\
+\midrule
+\texttt{/} & \texttt{web} (Next.js) & 3000 & User interface, client crypto engine, routing \\
+\texttt{/api} & \texttt{api} (FastAPI) & 8000 & REST endpoints, secret mediation, key registry \\
+\texttt{/keycloak} & \texttt{keycloak} & 8080 & OIDC identity management, OAuth2 login \\
+\texttt{:8080} (Internal) & \texttt{traefik} & 8080 & Reverse proxy dashboard and observability \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Behavioral Modeling and Protocol Workflows}
+
+The operational behavior of SecretShare is formalized through discrete interaction protocols governing key onboarding, secret transmission, and secret retrieval.
+
+\textbf{1. Device Key Registration Workflow.} Before an authenticated user can receive encrypted secrets, their client user agent must register an active cryptographic identity.
+According to Figure 2.2, upon successful authentication through Keycloak, the Next.js frontend invokes the Web Crypto API to generate an asymmetric RSA-OAEP key pair. The private key is serialized and committed to the browser persistent IndexedDB storage engine. The public key is exported into SPKI format, encoded as PEM text, and dispatched via registration endpoint accompanied by the user Bearer JWT. The FastAPI backend validates the token, extracts the username, and records the device public key in the PostgreSQL table.
+
+\imageplaceholder{sequence-key-registration}{UML sequence diagram illustrating browser RSA-OAEP key generation, IndexedDB persistence, and SPKI public key registration via FastAPI and PostgreSQL}{Device Public Key Registration Protocol}{sequence_key_registration.png}
+
+\textbf{2. Secret Creation and Hybrid Encryption Protocol.} The sender workflow operates completely client-side up to the moment of final envelope dispatch.
+According to Figure 2.3, the sender specifies the recipient username and the plaintext secret within the web interface. The frontend queries the recipient device keys. The browser generates a cryptographically secure 256-bit symmetric key ($K_{AES}$) and a 96-bit initialization vector ($IV$). The plaintext is encrypted under AES-256-GCM. Subsequently, $K_{AES}$ is encrypted independently for each recipient device public key using RSA-OAEP. The resulting envelope:
+\begin{equation}
+\mathcal{E} = \{ \text{recipient\_id}, [\{ \text{device\_id}, E_{RSA}(K_{AES}) \}, \dots], IV, C, \text{ttl\_seconds} \}
+\label{eq:envelope}
+\end{equation}
+is transmitted to the backend. In formula (2.1), $\text{recipient\_id}$ represents the target Keycloak username, $E_{RSA}$ denotes the asymmetric key wrapping operation, $IV$ is the 96-bit initialization vector, $C$ represents the ciphertext, and $\text{ttl\_seconds}$ defines the temporal lifetime of the secret. The backend generates a 256-bit cryptographically random token identifier ($ID$), persists $\mathcal{E}$ in Redis under key \texttt{s:\{ID\}} with the designated TTL, and returns the identifier to the sender.
+
+\imageplaceholder{sequence-secret-creation}{UML sequence diagram depicting recipient key retrieval, browser-side AES-GCM encryption, RSA-OAEP key encapsulation, and envelope storage in Redis}{Hybrid Encryption and Secret Creation Protocol}{sequence_secret_creation.png}
+
+\textbf{3. Secret Retrieval, Existence Verification, and Atomic Burn.} To prevent unauthorized consumption and accidental link expiration, retrieval is executed as a two-phase protocol.
+According to Figure 2.4, when a recipient accesses a secret link (\texttt{/?id=\{ID\}}), the frontend immediately executes an existence verification by sending an existence check request with the identifier in the request body. If the secret exists, the application displays the Burn-After-Reading Warning Notice modal. If the user is unauthenticated, the modal prompts an OIDC login sequence that redirects back to the secret link upon completion.
+
+When the recipient confirms the reveal operation by clicking ``Reveal \& Burn'', the browser executes the reveal request with the payload identifier and their Bearer authentication token. The FastAPI backend validates the token and invokes the atomic Redis Lua script. The Lua script verifies that the authenticated user matches the recipient identifier stored within the envelope. If matched, the script executes an atomic deletion command and returns the envelope. If identity verification fails, the secret is preserved in storage, and HTTP 403 Forbidden is returned. Upon receiving the envelope, the recipient browser retrieves their private RSA key from IndexedDB, unwraps the symmetric $K_{AES}$, decrypts the ciphertext $C$, and presents the plaintext in memory.
+
+\imageplaceholder{sequence-secret-reveal}{UML sequence diagram showing existence check, warning modal, atomic Lua burn in Redis, and client-side RSA/AES decryption}{Atomic Reveal, Identity Verification, and Decryption Protocol}{sequence_secret_reveal.png}
+
+\subsection{Cryptographic Engineering and Zero-Knowledge Model}
+
+The cryptographic architecture of SecretShare is engineered to provide forward secrecy, integrity protection, and resilience against chosen-ciphertext attacks.
+
+\textbf{1. Symmetric Cryptography (AES-256-GCM).} Plaintext encryption utilizes Advanced Encryption Standard in Galois/Counter Mode (AES-GCM) with a 256-bit key length ($|K_{AES}| = 256 \text{ bits}$) and a 96-bit initialization vector ($|IV| = 12 \text{ bytes}$). AES-GCM provides authenticated encryption with associated data (AEAD), ensuring both confidentiality and cryptographic integrity. Any unauthorized modification of the ciphertext or IV during storage or transit triggers an authentication tag verification failure, causing the decryption operation to abort before returning corrupted data.
+
+\textbf{2. Asymmetric Key Encapsulation (RSA-OAEP).} Public key encapsulation is performed using RSA with Optimal Asymmetric Encryption Padding (RSA-OAEP) configured with a 2048-bit modulus and a SHA-256 hash digest function. OAEP incorporates randomized padding to ensure probabilistic encryption, defeating replay and algebraic homomorphism attacks. The encapsulation operation for device $j$ with public key $PK_j$ is defined by:
+\begin{equation}
+C_{key, j} = \text{RSA-OAEP-ENCRYPT}(PK_j, K_{AES}, \text{SHA-256})
+\label{eq:rsa_oaep}
+\end{equation}
+In formula (2.2), $PK_j$ denotes the RSA public key of device $j$, $K_{AES}$ represents the symmetric AES content encryption key, and SHA-256 represents the cryptographic hash function utilized for mask generation.
+
+\textbf{3. Atomic Redis Single-Delivery Script.} A critical innovation of SecretShare is the resolution of the ``decrypt-then-burn'' race condition. In classical ephemeral systems, an application reads a secret, inspects authorization, and then deletes it. If two concurrent requests arrive simultaneously, both read the secret before either deletes it, violating single-delivery invariants. Conversely, executing an atomic delete-on-read deletes the secret even if the caller was unauthorized, causing denial of service to the legitimate recipient.
+
+To resolve this vulnerability, SecretShare implements an atomic Redis Lua script evaluated directly on the Redis engine thread:
+\begin{lstlisting}[language=SQL]
+-- Atomic Recipient-Checked Burn Script (Redis Lua)
+local payload = redis.call('GET', KEYS[1])
+if not payload then 
+    return {'missing'} 
+end
+local ok, envelope = pcall(cjson.decode, payload)
+if not ok or type(envelope) ~= 'table' or envelope['recipient_id'] ~= ARGV[1] then
+    return {'denied'}
+end
+redis.call('DEL', KEYS[1])
+return {'burned', payload}
+\end{lstlisting}
+
+Because Redis processes Lua scripts as a singular atomic transaction, the state verification and deletion are indivisible. An unauthorized caller receives a denied status while the secret remains intact for the genuine recipient. When the genuine recipient invokes the script, the envelope is atomically returned and deleted simultaneously.
+
+\textbf{4. Security Audit Invariant AUD-6.} To prevent transport-layer access log leakage, SecretShare enforces invariant AUD-6. Web servers (e.g., Uvicorn, Nginx, Apache), reverse proxies (Traefik), and browser history engines systematically record HTTP request lines:
+\begin{equation}
+\text{Request-Line} = \text{Method} \quad \text{Request-URI} \quad \text{HTTP-Version}
+\label{eq:request_line}
+\end{equation}
+In formula (2.3), $\text{Method}$ denotes the HTTP action, $\text{Request-URI}$ defines the target path and query parameters, and $\text{HTTP-Version}$ designates the protocol version.
+
+If a secret identifier is placed in the URI, the full 256-bit identifier is permanently recorded in access logs across every intermediary network hop. Under rule AUD-6, all endpoints accepting a payload identifier require it strictly within the serialized JSON request body:
+\begin{lstlisting}[language=SQL]
+POST /api/secrets/reveal HTTP/1.1
+Host: pr-30.tailnet.ts.net
+Authorization: Bearer eyJhbGciOi...
+Content-Type: application/json
+
+{"payload_id": "v7x9Bq2L1mZ0k8wRtN5yP4uA3cE6dF8gH1jK2lM3nO4"}
+\end{lstlisting}
+The request URI recorded in access logs is exclusively \texttt{/api/secrets/reveal}, completely shielding the sensitive payload identifier from infrastructure logging.
+
+% ------------------------------------------------------------------------------
+% CHAPTER 3: IMPLEMENTATION AND SYSTEM VERIFICATION
+% ------------------------------------------------------------------------------
+\section{Implementation and System Verification}
+
+The practical engineering of SecretShare emphasizes modern asynchronous programming patterns, strict type safety, zero external cryptographic runtime dependencies on the client, and fully automated verification pipelines. This chapter documents the implementation details of the frontend client, backend application, database persistence layer, and the continuous integration and preview deployment infrastructure.
+
+\subsection{Frontend Web Client Implementation}
+
+The user interface of SecretShare is developed utilizing Next.js (App Router) and TypeScript. The application is deliberately architected with minimal external UI dependencies to maintain a lightweight footprint, high rendering performance, and a minimized attack surface.
+
+\textbf{1. Browser Cryptographic Engine (\texttt{web/lib/crypto.ts}).} Cryptographic operations interface directly with the W3C Web Crypto API (\texttt{window.crypto.subtle}). Key generation is executed during user onboarding:
+\begin{lstlisting}[language=Python]
+export async function generateRsaKeyPair(): Promise<CryptoKeyPair> {
+  return await window.crypto.subtle.generateKey(
+    {
+      name: 'RSA-OAEP',
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: 'SHA-256',
+    },
+    true,
+    ['encrypt', 'decrypt']
+  )
+}
+\end{lstlisting}
+Public keys are exported into binary SPKI format, base64-encoded, and formatted with standard PEM header boundaries before network transmission. Symmetric encryption generates a 256-bit cryptographic AES key using \texttt{crypto.getRandomValues()} and returns base64-encoded ciphertext and initialization vectors.
+
+\textbf{2. Local Keystore Persistence (\texttt{web/lib/key-store.ts}).} The generated RSA private key must persist across browser sessions without leaving the client device. The application implements an asynchronous storage abstraction over the browser IndexedDB API (\texttt{secretshare\_keystore}). Keys are indexed by the authenticated Keycloak username, guaranteeing cryptographic isolation between distinct user sessions on the same physical workstation.
+
+\textbf{3. User Interface and Burn Warning Modal (\texttt{web/app/page.tsx}).} The user interface is structured into two primary operational regions: secret creation and secret retrieval.
+According to Figure 3.1, when a user accesses a shareable link or pastes a payload identifier into the retrieval field, the application initiates an existence check. Upon positive confirmation, the application renders a prominent modal dialog displaying the \textbf{Burn-After-Reading Warning}. The dialog informs the recipient that proceeding with the reveal operation will irrevocably destroy the secret from server storage. If the visitor is unauthenticated, the modal dynamically renders an authentication button linking to the Keycloak OIDC login sequence, returning the user to the pending reveal state upon successful credential verification.
+
+\imageplaceholder{ui-burn-modal}{Screenshot of the Next.js user interface displaying the active Burn-After-Reading Warning modal with Reveal and Burn confirmation buttons}{User Interface Burn-After-Reading Confirmation Modal}{ui_burn_modal.png}
+
+According to Figure 3.2, upon successful secret creation, the interface displays the generated secret payload identifier along with an automatically constructed shareable secret link accompanied by a one-click clipboard copy button with visual feedback.
+
+\imageplaceholder{ui-creation-result}{Screenshot of the secret creation success card showing the shareable URL, copy button, payload identifier, and expiration timestamp}{Secret Creation Interface and Shareable Link Generation}{ui_creation_result.png}
+
+\subsection{Backend Microservice and Ephemeral Storage Engine}
+
+The backend application is implemented using FastAPI, Python 3.11, and modern asynchronous concurrency primitives (\texttt{asyncio}).
+
+\textbf{1. Centralized Configuration Management (\texttt{api/app/core/config.py}).} Configuration management is centralized using Pydantic Settings (\texttt{pydantic-settings}). Application configuration parameters—including database connection URIs, Redis connection credentials, Keycloak client settings, payload limits, and Time-to-Live bounds—are loaded from environment variables and strictly validated at container startup. Direct calls to \texttt{os.getenv} within operational service code are strictly prohibited, preventing runtime type coercion errors.
+
+\textbf{2. Relational Schema and Database Migrations.} Relational persistence is governed by SQLAlchemy ORM and Alembic. The database schema encompasses three core tables:
+\begin{itemize}
+  \item \texttt{users}: maintains unique internal user identifiers, Keycloak identity mappings, username references, and creation timestamps;
+  \item \texttt{device\_keys}: stores device public keys (SPKI PEM), hardware platform identifiers, descriptive labels, and registration timestamps linked via foreign key to \texttt{users};
+  \item \texttt{audit\_events}: records security audit events, including secret creation, existence checks, reveal attempts, and access denial events.
+\end{itemize}
+
+In strict compliance with audit invariant AUD-6, the \texttt{audit\_events} table enforces a database-level check constraint ensuring that only the first 8 characters of a payload identifier are stored as an audit reference prefix. Full payload identifiers, plaintext secrets, and decryption keys are permanently excluded from database persistence. Database migrations execute automatically during container entrypoint execution, guaranteeing schema synchronization prior to application traffic ingestion.
+
+\textbf{3. Defensive Security Middlewares.} The FastAPI application is shielded by multiple custom ASGI middleware layers:
+\begin{itemize}
+  \item \textbf{BodySizeLimitMiddleware:} inspects incoming HTTP \texttt{Content-Length} headers and active stream byte counts, immediately aborting requests exceeding 64 KB with HTTP 413 Payload Too Large before memory buffer allocation;
+  \item \textbf{TrustedProxyMiddleware:} parses \texttt{X-Forwarded-For} headers exclusively from trusted proxy CIDR ranges (Traefik and Tailscale interfaces), extracting the authentic remote client IP address for accurate rate limiting and security auditing;
+  \item \textbf{Input Masking Error Handlers:} global exception handlers intercept validation errors and strip the original request input from the JSON error response, ensuring that malformed payloads are never reflected in server error bodies.
+\end{itemize}
+
+\subsection{Continuous Integration, Automated Testing, and PR Previews}
+
+To guarantee that code modifications do not introduce regressions, break cryptographic invariants, or compromise deployment stability, SecretShare implements an extensive automated verification matrix.
+
+\textbf{1. Automated Testing Architecture.} The test harness encompasses unit tests, security invariant verifications, live OAuth integration tests, and shell-based routing checks:
+\begin{itemize}
+  \item \textbf{Unit and Invariant Tests (\texttt{pytest}):} verify service layer operations, cryptographic schema validations, and error handling. A dedicated security test suite programmatically introspects all FastAPI route definitions, verifying that zero routes accept payload identifiers within URL path parameters;
+  \item \textbf{Concurrent Race Condition Tests:} verify that 10 concurrent unauthorized reveal requests racing 10 legitimate recipient requests cannot trigger premature secret deletion;
+  \item \textbf{Datastore TLS Verification (\texttt{test-tls.yml}):} boots the internal certificate authority container and validates that both PostgreSQL and Redis reject unencrypted plain-text connections and enforce TLS 1.2+ encryption using the provisioned CA root;
+  \item \textbf{Live OAuth Integration Tests:} executed inside isolated container environments, validating token acquisition, PKCE verification, and end-to-end secret delivery against a real Keycloak instance.
+\end{itemize}
+
+As shown in Table 3.1, the automated testing matrix achieves high test coverage across all critical functional modules.
+
+\begin{table}[htbp]
+\tablesetup
+\caption{Automated Test Suite Execution Matrix}
+\label{tab:test_matrix}
+\begin{tabularx}{\textwidth}{l p{0.3\textwidth} c X}
+\toprule
+\textbf{Test Category} & \textbf{Execution Target} & \textbf{Status} & \textbf{Core Invariants Verified} \\
+\midrule
+Security & \texttt{test\_access\_log.py} & Passed & AUD-6: Zero route path parameters \\
+Concurrency & \texttt{test\_invariants.py} & Passed & Single delivery; atomic Lua non-destructive \\
+Datastore TLS & \texttt{test\_tls.py} & Passed & Internal mTLS/TLS across Postgres \& Redis \\
+OAuth Flow & \texttt{test\_oauth.py} & Passed & PKCE exchange, JWT claims validation \\
+Web Routing & \texttt{test\_routing.sh} & Passed & Traefik edge routing, Next.js asset integrity \\
+E2E Lifecycle & \texttt{test\_lifecycle.sh} & Passed & Create $\to$ Exists $\to$ Reveal $\to$ Burn \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{2. Ephemeral Pull-Request Previews via Tailscale HTTPS.} A primary DevOps milestone of the project is the implementation of fully automated, ephemeral preview environments.
+According to Figure 3.3, upon opening or updating a pull request on GitHub, the preview deployment workflow executes. The runner connects to the staging host via Tailscale SSH, checks out the PR worktree, and provisions an isolated Docker Compose stack with dedicated project names. Traefik automatically routes inbound HTTPS traffic matching the preview subdomain to the preview containers, providing developers and reviewers with an immediate, live staging instance equipped with full valid TLS certificates and pre-seeded test accounts.
+
+\imageplaceholder{ci-cd-pipeline}{Screenshot of the GitHub Actions workflow pipeline showing parallel execution of test-api, test-tls, and ephemeral deploy-preview jobs}{Automated GitHub Actions CI/CD Pipeline}{ci_cd_pipeline.png}
+
+% ------------------------------------------------------------------------------
+% CONCLUSIONS
+% ------------------------------------------------------------------------------
+\unnumberedsection{CONCLUSIONS}
+
+The software engineering internship project successfully designed, implemented, and verified \textbf{SecretShare}, an enterprise-ready, zero-trust ephemeral secret delivery platform. By addressing the fundamental security vulnerabilities inherent in traditional secret-sharing utilities, the project establishes a robust reference architecture for secure, temporary credential handoffs.
+
+The principal technical achievements realized throughout the internship project include:
+\begin{itemize}
+  \item the successful realization of a zero-knowledge threat model, ensuring that the central application backend acts solely as a blind ciphertext storage broker with zero visibility into plaintext secrets or decryption keys;
+  \item the implementation of a robust browser-based hybrid encryption engine combining asymmetric RSA-OAEP 2048-bit key wrapping with symmetric AES-256-GCM authenticated encryption utilizing native W3C Web Crypto primitives;
+  \item the eradication of destructive race conditions and link-crawler vulnerabilities through the design of an atomic Redis Lua single-delivery script;
+  \item the rigorous enforcement of security audit rule AUD-6 across all API routes, preventing secret identifier leakage into reverse proxy logs, corporate firewalls, and browser histories;
+  \item the implementation of turnkey datastore security, establishing automated internal TLS certificate authority provisioning across PostgreSQL and Redis datastores;
+  \item the construction of an automated continuous integration and ephemeral preview deployment workflow utilizing Tailscale HTTPS subdomains, accelerating collaborative verification.
+\end{itemize}
+
+Despite these substantial achievements, certain operational and architectural limitations remain identified for future iterations:
+\begin{itemize}
+  \item \textbf{Device-Specific Decryption Guard:} currently, if a recipient opens a secret on a browser whose device key was not included during encryption (e.g., a newly installed browser), the secret is burned upon retrieval and decryption fails locally. A future enhancement should require the client to supply its registered device identifier during reveal, allowing the server to refuse the request without burning if no matching key exists;
+  \item \textbf{Non-Extractable CryptoKey Objects:} while private keys are currently isolated within client IndexedDB storage, generating them as non-extractable CryptoKey handles will provide hardened resilience against potential cross-site scripting (XSS) extraction;
+  \item \textbf{User Public Key Enumeration Protection:} the public key retrieval endpoint currently returns HTTP 404 when a user does not exist, permitting username enumeration. Requiring authentication or returning a uniform response structure will eliminate this exposure vector;
+  \item \textbf{Sender Management Dashboard:} future milestones will implement an authenticated sender interface allowing users to view the status of active outgoing secrets, monitor retrieval audit logs, and trigger early revocations prior to automatic TTL expiration.
+\end{itemize}
+
+In conclusion, SecretShare proves that uncompromising cryptographic security, zero-trust server blindness, and frictionless user ergonomics can be successfully harmonized within modern web application architectures.
+
+% ------------------------------------------------------------------------------
+% REFERENCES
+% ------------------------------------------------------------------------------
+\unnumberedsection{REFERENCES}
+
+\begin{enumerate}
+\def\labelenumi{[\arabic{enumi}]}
+\item E. Rescorla, ``The Transport Layer Security (TLS) Protocol Version 1.3,'' RFC 8446, Internet Engineering Task Force (IETF), Aug. 2018. Available: \url{https://www.rfc-editor.org/rfc/rfc8446}.
+\item D. Dworkin, ``Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC,'' NIST Special Publication 800-38D, National Institute of Standards and Technology, Gaithersburg, MD, Nov. 2007.
+\item J. Jonsson and B. Kaliski, ``Public-Key Cryptography Standards (PKCS) \#1: RSA Cryptography Specifications Version 2.1,'' RFC 3447, Internet Engineering Task Force (IETF), Feb. 2003. Available: \url{https://www.rfc-editor.org/rfc/rfc3447}.
+\item W3C Web Cryptography Working Group, ``Web Cryptography API: W3C Recommendation,'' World Wide Web Consortium (W3C), Jan. 2017. Available: \url{https://www.w3.org/TR/WebCryptoAPI/}.
+\item N. Sakimura, J. Bradley, M. Jones, B. de Medeiros, and C. Mortimore, ``OpenID Connect Core 1.0 incorporating errata set 1,'' The OpenID Foundation, Nov. 2014. Available: \url{https://openid.net/specs/openid-connect-core-1_0.html}.
+\item K. Koblas and M. R. Koblas, ``Proof Key for Code Exchange by OAuth Public Clients,'' RFC 7636, Internet Engineering Task Force (IETF), Sep. 2015. Available: \url{https://www.rfc-editor.org/rfc/rfc7636}.
+\item J. Haals, ``Yopass: Share Secrets Securely With Ease,'' GitHub Repository, 2024. Available: \url{https://github.com/jhaals/yopass}.
+\item HashiCorp, ``HashiCorp Vault Architecture and Threat Model,'' HashiCorp Documentation, 2024. Available: \url{https://developer.hashicorp.com/vault/docs/internals/architecture}.
+\item Bitwarden Inc., ``Bitwarden Security White Paper: End-to-End Encryption Technology,'' Bitwarden Documentation, 2024. Available: \url{https://bitwarden.com/help/security-white-paper/}.
+\item Redis Ltd., ``Redis Programmability: Introduction to Lua Scripting with Redis,'' Redis Documentation, 2024. Available: \url{https://redis.io/docs/interact/programmability/}.
+\item S. Ramirez, ``FastAPI Framework: High Performance Asynchronous Python APIs,'' FastAPI Documentation, 2024. Available: \url{https://fastapi.tiangolo.com/}.
+\item Vercel Inc., ``Next.js App Router Documentation and Architecture,'' Vercel Documentation, 2024. Available: \url{https://nextjs.org/docs}.
+\item Traefik Labs, ``Traefik Proxy: The Cloud Native Application Proxy,'' Traefik Documentation, 2024. Available: \url{https://doc.traefik.io/traefik/}.
+\item Tailscale Inc., ``Tailscale MagicDNS and Ephemeral HTTPS Certificates Architecture,'' Tailscale Documentation, 2024. Available: \url{https://tailscale.com/kb/}.
+\end{enumerate}
+
+% ------------------------------------------------------------------------------
+% APPENDICES
+% ------------------------------------------------------------------------------
+\startappendix{APPENDIX A}{System Sequence Diagrams}
+
+According to Figure A.1, the comprehensive end-to-end secret creation and retrieval life cycle coordinates user agent interactions, asynchronous backend verification, Keycloak identity validation, and Redis atomic operations.
+
+\imageplaceholder{appendix-full-sequence}{Complete end-to-end UML sequence diagram combining Sender encryption, Keycloak OIDC login, existence verification, atomic Lua burn, and recipient local decryption}{Complete End-to-End System Interaction Sequence}{appendix_full_sequence.png}
+
+\startappendix{APPENDIX B}{Architectural Topology and Database Schemas}
+
+According to Figure B.1, the relational entity-relationship model depicts the relationships between registered users, device public keys, and partitioned security audit events.
+
+\imageplaceholder{appendix-er-diagram}{Entity Relationship (ER) diagram showing users, device\_keys, and audit\_events tables with foreign keys and check constraints}{Relational Database Entity Relationship Schema}{appendix_er_diagram.png}
+
+\startappendix{APPENDIX C}{Core Cryptographic and Ephemeral Storage Source Code}
+
+\noindent
+The following source code listing illustrates the server-side Redis Lua atomic burn script enforcing single delivery and caller identity verification:
+
+\begin{lstlisting}[language=SQL]
+-- Redis Lua Script for Atomic Recipient-Checked Secret Destruction
+-- KEYS[1]: Redis secret key ('s:<payload_id>')
+-- ARGV[1]: Authenticated caller username (from Keycloak token claims)
+
+local payload = redis.call('GET', KEYS[1])
+if not payload then 
+    return {'missing'} 
+end
+
+local ok, envelope = pcall(cjson.decode, payload)
+if not ok or type(envelope) ~= 'table' then
+    return {'error', 'malformed_payload'}
+end
+
+if envelope['recipient_id'] ~= ARGV[1] then
+    -- Caller is unauthorized; secret is intentionally preserved
+    return {'denied'}
+end
+
+-- Caller is authorized; secret is atomically deleted upon reading
+redis.call('DEL', KEYS[1])
+return {'burned', payload}
+\end{lstlisting}
+
+\vspace{0.6cm}
+\noindent
+The following source code listing illustrates the browser-side hybrid encryption routine combining AES-256-GCM authenticated payload encryption with RSA-OAEP key encapsulation:
+
+\begin{lstlisting}[language=Python]
+// Web Crypto Hybrid Encryption Implementation (web/lib/crypto.ts)
+export async function createEncryptedEnvelope(
+  plaintext: string,
+  recipientDevices: DeviceKeyItem[]
+): Promise<{ iv: string; ciphertext: string; encryptedKeys: any[] }> {
+  // 1. Generate an ephemeral random 256-bit AES key
+  const aesKey = await window.crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt']
+  );
+
+  // 2. Encrypt plaintext payload with AES-256-GCM
+  const iv = window.crypto.getRandomValues(new Uint8Array(12));
+  const encodedPlaintext = new TextEncoder().encode(plaintext);
+  const ciphertextBuffer = await window.crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    aesKey,
+    encodedPlaintext
+  );
+
+  // 3. Export raw AES key bytes for asymmetric encapsulation
+  const rawAesKey = await window.crypto.subtle.exportKey('raw', aesKey);
+
+  // 4. Wrap AES key for each recipient device using RSA-OAEP
+  const encryptedKeys = await Promise.all(
+    recipientDevices.map(async (device) => {
+      const rsaPublicKey = await importPublicKeyFromSpkiPem(device.public_key);
+      const wrappedKeyBuffer = await window.crypto.subtle.encrypt(
+        { name: 'RSA-OAEP' },
+        rsaPublicKey,
+        rawAesKey
+      );
+      return {
+        device_id: device.device_id,
+        platform: device.platform,
+        encrypted_aes_key: bufferToBase64(wrappedKeyBuffer),
+      };
+    })
+  );
+
+  return {
+    iv: bufferToBase64(iv),
+    ciphertext: bufferToBase64(ciphertextBuffer),
+    encryptedKeys,
+  };
+}
+\end{lstlisting}
 
 \end{document}
