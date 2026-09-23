@@ -1,6 +1,6 @@
 # SecretShare
 
-SecretShare is a secure, ephemeral secret-sharing platform featuring **client-side end-to-end hybrid encryption** (Web Crypto API: ECDH P-256 / RSA-OAEP 2048 + AES-GCM-256), zero-trust authentication via **Keycloak** (OAuth2 / OIDC with PKCE), **Next.js** frontend with NextAuth, **FastAPI** backend, ephemeral storage with **Redis**, audit logging in **PostgreSQL**, internal **TLS encryption** across datastores, and unified edge routing with **Traefik**.
+SecretShare is a secure, ephemeral secret-sharing platform featuring **client-side end-to-end hybrid encryption** (Web Crypto API: RSA-OAEP 2048 + AES-GCM-256), zero-trust authentication via **Keycloak** (OAuth2 / OIDC with PKCE), **Next.js** frontend with NextAuth, **FastAPI** backend, ephemeral storage with **Redis**, audit logging in **PostgreSQL**, internal **TLS encryption** across datastores, and unified edge routing with **Traefik**.
 
 ---
 
@@ -160,7 +160,7 @@ SecretShare implements zero-knowledge encryption directly inside the browser usi
 
 1. **Device Key Registration**:
    - Each authenticated user generates an RSA-OAEP key pair in their browser.
-   - The private key is stored securely in IndexedDB; the public key is registered with the backend at `POST /api/keys/register`.
+   - The key pair is stored in IndexedDB (the private key is currently generated as extractable, see R-02 in `api/docs/security/risk-register.md`); the public key is registered with the backend at `POST /api/keys/register`.
 2. **Secret Creation (Sender)**:
    - Sender fetches the recipient's active device public keys from `GET /api/keys/{user_id}`.
    - Sender generates a random **AES-256-GCM** content encryption key (CEK).
