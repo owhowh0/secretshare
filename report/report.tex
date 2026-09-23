@@ -121,16 +121,20 @@
 \newcommand{\imageplaceholder}[4]{%
   \begin{figure}[htbp]
     \centering
-    \fbox{%
-      \begin{minipage}{0.92\textwidth}
-        \centering
-        \vspace{0.6cm}
-        {\fontsize{11pt}{13pt}\selectfont\bfseries [SCREENSHOT / IMAGE PLACEHOLDER: #1]}\\[0.3cm]
-        {\fontsize{10pt}{12pt}\selectfont\itshape Description: #2}\\[0.2cm]
-        {\fontsize{9pt}{11pt}\selectfont\itshape Recommended graphic asset: \texttt{images/\detokenize{#4}}}
-        \vspace{0.6cm}
-      \end{minipage}%
-    }
+    \IfFileExists{images/#4}{%
+      \includegraphics[width=0.92\textwidth,height=0.50\textheight,keepaspectratio]{images/#4}%
+    }{%
+      \fbox{%
+        \begin{minipage}{0.92\textwidth}
+          \centering
+          \vspace{0.6cm}
+          {\fontsize{11pt}{13pt}\selectfont\bfseries [SCREENSHOT / IMAGE PLACEHOLDER: #1]}\\[0.3cm]
+          {\fontsize{10pt}{12pt}\selectfont\itshape Description: #2}\\[0.2cm]
+          {\fontsize{9pt}{11pt}\selectfont\itshape Recommended graphic asset: \texttt{images/\detokenize{#4}}}
+          \vspace{0.6cm}
+        \end{minipage}%
+      }%
+    }%
     \caption{#3}
     \label{fig:#1}
   \end{figure}
