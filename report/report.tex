@@ -163,7 +163,7 @@
     \leadin{#4}
     \centering
     \IfFileExists{#1}{%
-      \includegraphics[width=0.72\textwidth,keepaspectratio]{#1}%
+      \includegraphics[width=0.66\textwidth,keepaspectratio]{#1}%
     }{%
       \setlength{\fboxsep}{14pt}%
       \fbox{\parbox{0.82\textwidth}{\centering
@@ -638,11 +638,13 @@ This chapter describes how the design was implemented, which security controls p
 
 \subsec{Frontend Implementation and User Interface}
 
-The SecretShare frontend is implemented as a single-page web application using Next.js 15 with the App Router, React 19, TypeScript and Tailwind CSS, styled with accessible UI primitives from shadcn/ui. To uphold the zero-trust design, the client maintains a strict boundary between server-rendered layouts and browser-side cryptographic execution, isolating all sensitive operations within Client Components marked with the \texttt{"use client"} directive.
+The SecretShare frontend is implemented as a single-page web application using Next.js 15 with the App Router, React 19, Auth.js (NextAuth v5), and TypeScript. To mitigate frontend supply-chain vulnerabilities, the client avoids third-party component suites and utility-first CSS tooling. Instead, the interface relies on semantic HTML and a custom, zero-dependency design system defined in \texttt{globals.css} using CSS custom properties with a Gruvbox dark-theme palette and glassmorphism styling tokens. Sensitive client-side operations are isolated within Client Components designated with the \texttt{"use client"} directive, maintaining a strict boundary between server-rendered layouts and browser cryptographic memory.
 
-Client-side cryptographic routines interface directly with the standard Web Cryptography API (\texttt{window.crypto.subtle}) in \texttt{lib/crypto.ts} without external dependencies. On initial sign-in via Keycloak, the browser checks for an existing RSA-OAEP 2048-bit key pair in local storage. If absent, it generates a new pair, exports the public key in SubjectPublicKeyInfo (SPKI) format, and registers it with the API, storing the private key securely inside IndexedDB under \texttt{secretshare\_keystore} indexed by user identity.
+User authentication is integrated through Keycloak via OpenID Connect with PKCE, managed by Auth.js route handlers under \texttt{web/auth.ts}. Because Traefik routes the frontend, the API under \texttt{/api}, and the Keycloak realm under \texttt{/keycloak} onto a single domain, authentication flows operate strictly within a unified same-origin scope. The active session extracts the authenticated user identity (\texttt{preferred\_username}) and bearer access token, scoping client cryptographic storage and authorized API calls without exposing credentials to untrusted origins.
 
-The user interface partitions both secret creation and secret retrieval into two sequential, verifiable actions. For secret creation, the first action requires configuring the secret payload and parameters, while the second action displays the resulting ephemeral link.
+Client-side cryptographic operations interface directly with the standard Web Cryptography API (\texttt{window.crypto.subtle}) in \texttt{lib/crypto.ts} without third-party mathematical libraries. On initial sign-in, the application verifies whether an RSA-OAEP 2048-bit key pair (using SHA-256 and public exponent 65537) exists for the active username. If absent, the browser generates a key pair, exports the public key in SubjectPublicKeyInfo (SPKI) PEM format, and registers it via \texttt{POST /api/keys/register}. The private key is marked non-extractable and stored securely on the local device in an IndexedDB datastore named \texttt{secretshare\_keystore} under the \texttt{device\_keys} object store.
+
+To enforce application security and prevent premature secret destruction, the user interface structures both secret creation and secret retrieval into two sequential, verifiable actions. For secret creation, the first action configures the recipient, payload, and lifetime, while the second action triggers hybrid encryption and presents the resulting ephemeral link.
 
 \screenshot{images/screenshots/secret_create1.png}%
   {Secret composition form with recipient selection and expiration configuration}%
@@ -651,7 +653,7 @@ The user interface partitions both secret creation and secret retrieval into two
   {Figure 3.1: Secret Composition Interface}%
   {Secret composition form displaying recipient selection, secret input, expiration configuration, and cryptographic readiness indicator.}
 
-When the sender triggers the creation action, the browser executes the hybrid encryption pipeline: it generates a random 256-bit AES-GCM content key, encrypts the plaintext with a fresh 96-bit initialization vector, wraps the key for each active recipient device, and transmits the envelope to \texttt{POST /api/secrets}.
+When the sender clicks the creation button, the browser fetches the recipient's registered public keys via \texttt{GET /api/keys/\{user\_id\}} and executes local hybrid encryption: it creates a random 256-bit AES-GCM content key, encrypts the plaintext with a fresh 96-bit initialization vector, wraps the key for each active recipient device, and transmits the resulting ciphertext envelope to \texttt{POST /api/secrets}.
 
 \screenshot{images/screenshots/secret_create2.png}%
   {Generated ephemeral share link with one-click copy action}%
@@ -660,7 +662,9 @@ When the sender triggers the creation action, the browser executes the hybrid en
   {Figure 3.2: Generated Ephemeral Share Link}%
   {Interface displaying the generated secret share URL with the one-click copy button.}
 
-Retrieving a secret likewise comprises two distinct operational phases designed to prevent accidental consumption by automated link previews. When navigating to a share link carrying the secret identifier, the web client performs a non-destructive existence check via \texttt{POST /api/secrets/exists}.
+\clearpage
+
+Retrieving a secret likewise comprises two distinct operational phases designed to prevent accidental consumption by automated link crawlers, antivirus scanners, or unauthorized users. When navigating to an access link carrying the secret identifier, the web application performs a non-destructive existence check via \texttt{POST /api/secrets/exists}, passing the identifier strictly inside the JSON request body.
 
 \screenshot{images/screenshots/secret_reveal1.png}%
   {Burn warning notification modal prior to secret retrieval}%
@@ -669,7 +673,9 @@ Retrieving a secret likewise comprises two distinct operational phases designed 
   {Figure 3.3: Burn-After-Reading Warning Dialog}%
   {Modal warning dialogue alerting the recipient of permanent server-side destruction prior to retrieval.}
 
-After the recipient confirms the warning and authenticates through OpenID Connect, the client submits the atomic retrieval request via \texttt{POST /api/secrets/reveal}. The server executes the atomic Lua verification and single-delivery deletion in Redis, returning the ciphertext envelope. The browser unwraps the symmetric key with its local private key, decrypts the ciphertext in memory, and renders the plaintext.
+\clearpage
+
+After the recipient acknowledges the warning and authenticates through Keycloak, the client submits the atomic retrieval request via \texttt{POST /api/secrets/reveal}. The server executes the atomic Lua verification and single-delivery deletion in Redis, returning the ciphertext envelope. The browser unwraps the symmetric content key using its IndexedDB private key, decrypts the ciphertext in memory, and renders the plaintext.
 
 \screenshot{images/screenshots/secret_reveal2.png}%
   {Decrypted plaintext secret revealed in browser memory}%
@@ -678,7 +684,12 @@ After the recipient confirms the warning and authenticates through OpenID Connec
   {Figure 3.4: Decrypted Secret Plaintext View}%
   {Interface displaying the decrypted secret plaintext with one-click copy and memory-clearing controls.}
 
+To address the frontend security objectives mandated by the DAS guidelines, the web layer enforces four complementary client protections. First, a strict Content Security Policy dynamically configured in \texttt{web/middleware.ts} binds a fresh UUID nonce to every HTTP response, enforcing nonced \texttt{script-src} with \texttt{'strict-dynamic'} while explicitly disallowing \texttt{'unsafe-inline'} scripts to prevent script injection and key exfiltration. Second, anti-clickjacking controls (\texttt{frame-ancestors 'none'} and \texttt{X-Frame-Options: DENY}) prevent framing attacks intended to trigger unauthorized secret burning. Third, origin boundaries are secured via \texttt{base-uri 'none'}, \texttt{object-src 'none'}, and \texttt{form-action 'self'}. Finally, plaintext secrets exist solely in transient component memory; after decryption, the secret identifier in the URL is scrubbed via \texttt{window.history.replaceState}, ensuring zero persistent footprint in browser history or local caching.
+
+Compliance with these frontend protections is validated automatically through an automated security test harness in \texttt{web/tests/security/csp.test.mjs}. The test suite executes two categories of assertions against production builds. As a negative control, it parses HTTP response headers to ensure constant baseline protections (\texttt{X-Frame-Options: DENY}, \texttt{X-Content-Type-Options: nosniff}, and \texttt{Referrer-Policy: no-referrer}) and verifies that every inline script emitted during Next.js hydration possesses the dynamic per-response nonce. As a positive control, the harness replays the real Content Security Policy header over a local HTTP server serving a test document with an injected, unnonced inline script. The test confirms that script execution is strictly refused by the browser security sandbox, demonstrating that client-side secret material remains resilient against injection attacks.
+
 \subsec{Backend Architecture and API Routing}
+\enlargethispage{5\baselineskip}
 
 The API is a FastAPI application written in Python 3.12. All configuration is read by one Pydantic settings class from environment variables; no other module reads the environment. The settings class validates the configuration at start-up: it rejects lifetime bounds that contradict each other, malformed proxy address ranges and, in production mode, missing database or identity provider settings. Database migrations are applied by Alembic when the container starts, and a failed migration stops the container.
 
