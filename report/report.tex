@@ -312,6 +312,7 @@ The minimum viable product was built by a team of five students during a four-we
 \pagestyle{fancy}
 
 \unnumberedsection{INTRODUCTION}
+\enlargethispage{2\baselineskip}
 
 Software teams exchange credentials every day: a developer needs a database password during onboarding, an operator shares a temporary cloud token during an incident, and a contractor receives an API key for an integration. In practice these values are usually pasted into the tools the team already uses. The GitGuardian report on secrets sprawl found leaked secrets in 2.4\% of the corporate Slack channels and 6.1\% of the Jira tickets that it analysed \cite{gitguardian2025}. Such messages are kept for years, copied into backups and indexed for search, so one compromised account exposes a history of credentials. Stolen credentials matter because credential abuse remained the most common initial access vector in the breaches analysed in the 2025 Verizon Data Breach Investigations Report \cite{verizon2025}.
 
@@ -646,6 +647,8 @@ Client-side cryptographic operations interface directly with the standard Web Cr
 
 To enforce application security and prevent premature secret destruction, the user interface structures both secret creation and secret retrieval into two sequential, verifiable actions. For secret creation, the first action configures the recipient, payload, and lifetime, while the second action triggers hybrid encryption and presents the resulting ephemeral link.
 
+\clearpage
+
 \screenshot{images/screenshots/secret_create1.png}%
   {Secret composition form with recipient selection and expiration configuration}%
   {fig:secret_create_form}%
@@ -662,9 +665,13 @@ When the sender clicks the creation button, the browser fetches the recipient's 
   {Figure 3.2: Generated Ephemeral Share Link}%
   {Interface displaying the generated secret share URL with the one-click copy button.}
 
+Once generated, the share link embeds the ephemeral secret identifier within the URL parameter. The sender distributes this URL to the intended recipient through any corporate communication channel, including chat applications or email, confident that intermediate network hops and message logs cannot decrypt the payload without access to the recipient's private device key.
+
 \clearpage
 
-Retrieving a secret likewise comprises two distinct operational phases designed to prevent accidental consumption by automated link crawlers, antivirus scanners, or unauthorized users. When navigating to an access link carrying the secret identifier, the web application performs a non-destructive existence check via \texttt{POST /api/secrets/exists}, passing the identifier strictly inside the JSON request body.
+Retrieving a secret likewise comprises two distinct operational phases designed to prevent accidental consumption by automated link crawlers, antivirus scanners, or unauthorized users. General-purpose link previews and security crawlers, such as Slack unfurlers and Microsoft Defender Safe Links, automatically execute HTTP GET requests against URLs appearing in messages. If retrieval were bound to link navigation, these automated background requests would permanently destroy the secret before the human recipient could access it.
+
+To eliminate this vulnerability, navigation to a secret URL performs only a non-destructive existence check via \texttt{POST /api/secrets/exists}, passing the identifier strictly inside the JSON request body.
 
 \screenshot{images/screenshots/secret_reveal1.png}%
   {Burn warning notification modal prior to secret retrieval}%
@@ -672,6 +679,8 @@ Retrieving a secret likewise comprises two distinct operational phases designed 
   {As shown in Figure~3.3, upon confirming the existence of the secret, the interface displays an explicit burn-after-reading modal dialog that warns the recipient that revealing the secret will permanently and irreversibly destroy it from the server.}%
   {Figure 3.3: Burn-After-Reading Warning Dialog}%
   {Modal warning dialogue alerting the recipient of permanent server-side destruction prior to retrieval.}
+
+The modal requires deliberate recipient interaction, ensuring that secret consumption occurs only through conscious human initiation. Furthermore, if the secret is designated for an authenticated recipient, the dialogue prompts the user to verify their identity via Keycloak before authorizing the single-delivery retrieval request.
 
 \clearpage
 
