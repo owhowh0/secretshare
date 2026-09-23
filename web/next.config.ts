@@ -24,10 +24,27 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   output: 'standalone',
   async rewrites() {
+    const apiTarget = process.env.INTERNAL_API_URL || 'http://api:8000'
     return [
       {
-        source: '/api/:path*',
-        destination: `${process.env.INTERNAL_API_URL || 'http://api:8000'}/:path*`,
+        source: '/api/keys/:path*',
+        destination: `${apiTarget}/keys/:path*`,
+      },
+      {
+        source: '/api/secrets/:path*',
+        destination: `${apiTarget}/secrets/:path*`,
+      },
+      {
+        source: '/api/health/:path*',
+        destination: `${apiTarget}/health/:path*`,
+      },
+      {
+        source: '/api/docs/:path*',
+        destination: `${apiTarget}/docs/:path*`,
+      },
+      {
+        source: '/api/openapi.json',
+        destination: `${apiTarget}/openapi.json`,
       },
     ]
   },
