@@ -15,6 +15,7 @@
 
 % --- Core Academic & Layout Packages ---
 \usepackage{xcolor}
+\usepackage[T1]{fontenc}
 \usepackage{microtype}
 \usepackage{titlesec}
 \usepackage{caption}
@@ -87,16 +88,6 @@
   {\hspace*{1.25cm}\thesubsubsection}{1em}{}
 \titlespacing*{\subsubsection}{0pt}{12pt}{6pt}
 
-% --- Table of Contents heading override ---
-% The stock \tableofcontents (article class) prints its own \section*{\contentsname}
-% heading before dumping the .toc file. Since our \titleformat{\section} inserts a
-% \clearpage, that produced a second, unstyled "Contents" heading on its own extra
-% page, after our manual "TABLE OF CONTENTS" heading. Strip that built-in heading so
-% \tableofcontents only typesets the listing itself.
-\makeatletter
-\renewcommand{\tableofcontents}{\@starttoc{toc}}
-\makeatother
-
 % Unnumbered Sections (Introduction, Conclusions, References): 13pt Bold Centered Uppercase
 \newcommand{\unnumberedsection}[1]{%
   \clearpage
@@ -153,25 +144,25 @@
 % #2: Description
 % #3: Caption
 % #4: Filename hint
-\newcommand{\imageplaceholder}[4]{%
+\newcommand{\imageplaceholder}[5][0.35\textheight]{%
   \begin{figure}[htbp]
     \centering
-    \IfFileExists{images/#4}{%
-      \includegraphics[width=0.92\textwidth,height=0.50\textheight,keepaspectratio]{images/#4}%
+    \IfFileExists{images/#5}{%
+      \includegraphics[width=0.92\textwidth,height=#1,keepaspectratio]{images/#5}%
     }{%
       \fbox{%
         \begin{minipage}{0.92\textwidth}
           \centering
           \vspace{0.6cm}
-          {\fontsize{11pt}{13pt}\selectfont\bfseries [SCREENSHOT / IMAGE PLACEHOLDER: #1]}\\[0.3cm]
-          {\fontsize{10pt}{12pt}\selectfont\itshape Description: #2}\\[0.2cm]
-          {\fontsize{9pt}{11pt}\selectfont\itshape Recommended graphic asset: \texttt{images/\detokenize{#4}}}
+          {\fontsize{11pt}{13pt}\selectfont\bfseries [SCREENSHOT / IMAGE PLACEHOLDER: #2]}\\[0.3cm]
+          {\fontsize{10pt}{12pt}\selectfont\itshape Description: #3}\\[0.2cm]
+          {\fontsize{9pt}{11pt}\selectfont\itshape Recommended graphic asset: \texttt{images/\detokenize{#5}}}
           \vspace{0.6cm}
         \end{minipage}%
       }%
     }%
-    \caption{#3}
-    \label{fig:#1}
+    \caption{#4}
+    \label{fig:#2}
   \end{figure}
 }
 
@@ -219,7 +210,7 @@
 \begin{flushleft}
 \begin{tabular}{p{0.32\textwidth} p{0.38\textwidth} p{0.22\textwidth}}
 \textbf{Team Members:} & & \\
-Student: & Ionuț Șoimu, FAF-221 & *Signature \\
+Student: & Ionu\c{t} \c{S}oimu, FAF-221 & *Signature \\
 & & \\
 \textbf{Mentor:} & & \\
 University Internship Mentor: & From internship contract & *Signature \\
@@ -246,12 +237,16 @@ University Internship Mentor: & From internship contract & *Signature \\
 
 % --- Table of Contents ---
 \clearpage
-\begin{center}
-  {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{TABLE OF CONTENTS}\par}
-\end{center}
-\vspace{14pt}
 {
-  \setstretch{1.2}
+  \makeatletter
+  \renewcommand{\tableofcontents}{%
+    \begin{center}%
+      {\fontsize{13pt}{16pt}\selectfont\bfseries TABLE OF CONTENTS\par}%
+    \end{center}%
+    \vspace{14pt}%
+    {\setstretch{1.15}\@starttoc{toc}}%
+  }
+  \makeatother
   \tableofcontents
 }
 
@@ -262,58 +257,36 @@ University Internship Mentor: & From internship contract & *Signature \\
 \begin{center}
   {\fontsize{13pt}{16pt}\bfseries\MakeUppercase{LIST OF ABBREVIATIONS}\par}
 \end{center}
-\vspace{14pt}
-\setlength{\LTleft}{0pt}
-\setlength{\LTright}{0pt}
-\begin{longtable}{p{0.22\textwidth} p{0.72\textwidth}}
-\textbf{AEAD} & Authenticated Encryption with Associated Data \\
-\textbf{AES} & Advanced Encryption Standard \\
-\textbf{API} & Application Programming Interface \\
-\textbf{ASGI} & Asynchronous Server Gateway Interface \\
-\textbf{AUD} & Security Audit Invariant Standard \\
-\textbf{CA} & Certificate Authority \\
-\textbf{CEK} & Content Encryption Key \\
-\textbf{CI/CD} & Continuous Integration / Continuous Deployment \\
-\textbf{CIDR} & Classless Inter-Domain Routing \\
-\textbf{CSP} & Content Security Policy \\
-\textbf{CSRF} & Cross-Site Request Forgery \\
-\textbf{DBMS} & Database Management System \\
-\textbf{DOM} & Document Object Model \\
-\textbf{E2E} & End-to-End (Encryption) \\
-\textbf{ECDH} & Elliptic Curve Diffie--Hellman \\
-\textbf{GCM} & Galois/Counter Mode \\
-\textbf{HTTP} & Hypertext Transfer Protocol \\
-\textbf{HTTPS} & Hypertext Transfer Protocol Secure \\
-\textbf{IAM} & Identity and Access Management \\
-\textbf{IETF} & Internet Engineering Task Force \\
-\textbf{IP} & Internet Protocol \\
-\textbf{IV} & Initialization Vector \\
-\textbf{JSON} & JavaScript Object Notation \\
-\textbf{JWT} & JSON Web Token \\
-\textbf{mTLS} & Mutual Transport Layer Security \\
-\textbf{NIST} & National Institute of Standards and Technology \\
-\textbf{OIDC} & OpenID Connect \\
-\textbf{ORM} & Object-Relational Mapping \\
-\textbf{PKCE} & Proof Key for Code Exchange \\
-\textbf{REST} & Representational State Transfer \\
-\textbf{RFC} & Request for Comments \\
-\textbf{RSA} & Rivest--Shamir--Adleman Cryptosystem \\
-\textbf{RSA-OAEP} & RSA Optimal Asymmetric Encryption Padding \\
-\textbf{SHA} & Secure Hash Algorithm \\
-\textbf{SPKI} & Subject Public Key Info \\
-\textbf{SQL} & Structured Query Language \\
-\textbf{SSH} & Secure Shell \\
-\textbf{SRE} & Site Reliability Engineering \\
-\textbf{TLS} & Transport Layer Security \\
-\textbf{TTL} & Time-to-Live \\
-\textbf{UI} & User Interface \\
-\textbf{UML} & Unified Modeling Language \\
-\textbf{URI} & Uniform Resource Identifier \\
-\textbf{URL} & Uniform Resource Locator \\
-\textbf{UUID} & Universally Unique Identifier \\
-\textbf{W3C} & World Wide Web Consortium \\
-\textbf{XSS} & Cross-Site Scripting \\
-\end{longtable}
+\vspace{12pt}
+{\fontsize{9.5pt}{12pt}\selectfont\singlespacing
+\noindent
+\begin{tabular}{@{}p{0.12\textwidth} p{0.34\textwidth} @{\hspace{0.03\textwidth}} p{0.18\textwidth} p{0.29\textwidth}@{}}
+\textbf{AEAD} & Authenticated Encryption (AD) & \textbf{mTLS} & Mutual TLS \\
+\textbf{AES} & Advanced Encryption Standard & \textbf{NIST} & Nat. Inst. Standards \& Tech. \\
+\textbf{API} & Application Programming Interface & \textbf{OIDC} & OpenID Connect \\
+\textbf{ASGI} & Asynchronous Server Gateway & \textbf{ORM} & Object-Relational Mapping \\
+\textbf{AUD} & Security Audit Invariant Standard & \textbf{PKCE} & Proof Key for Code Exchange \\
+\textbf{CA} & Certificate Authority & \textbf{REST} & Representational State Transfer \\
+\textbf{CEK} & Content Encryption Key & \textbf{RFC} & Request for Comments \\
+\textbf{CI/CD} & Continuous Integration / Delivery & \textbf{RSA} & Rivest--Shamir--Adleman \\
+\textbf{CIDR} & Classless Inter-Domain Routing & \textbf{RSA-OAEP} & RSA Optimal Asymmetric Padding \\
+\textbf{CSP} & Content Security Policy & \textbf{SHA} & Secure Hash Algorithm \\
+\textbf{CSRF} & Cross-Site Request Forgery & \textbf{SPKI} & Subject Public Key Info \\
+\textbf{DBMS} & Database Management System & \textbf{SQL} & Structured Query Language \\
+\textbf{DOM} & Document Object Model & \textbf{SSH} & Secure Shell \\
+\textbf{E2E} & End-to-End Encryption & \textbf{SRE} & Site Reliability Engineering \\
+\textbf{ECDH} & Elliptic Curve Diffie--Hellman & \textbf{TLS} & Transport Layer Security \\
+\textbf{GCM} & Galois/Counter Mode & \textbf{TTL} & Time-to-Live \\
+\textbf{HTTP} & Hypertext Transfer Protocol & \textbf{UI} & User Interface \\
+\textbf{HTTPS} & Hypertext Transfer Protocol Secure & \textbf{UML} & Unified Modeling Language \\
+\textbf{IAM} & Identity and Access Management & \textbf{URI} & Uniform Resource Identifier \\
+\textbf{IETF} & Internet Engineering Task Force & \textbf{URL} & Uniform Resource Locator \\
+\textbf{IP} & Internet Protocol & \textbf{UUID} & Universally Unique Identifier \\
+\textbf{IV} & Initialization Vector & \textbf{W3C} & World Wide Web Consortium \\
+\textbf{JSON} & JavaScript Object Notation & \textbf{XSS} & Cross-Site Scripting \\
+\textbf{JWT} & JSON Web Token & & \\
+\end{tabular}
+}
 
 % --- Abstract ---
 \clearpage
@@ -707,7 +680,7 @@ E2E Lifecycle & \texttt{test\_lifecycle.sh} & Passed & Create $\to$ Exists $\to$
 \textbf{2. Ephemeral Pull-Request Previews via Tailscale HTTPS.} A primary DevOps milestone of the project is the implementation of fully automated, ephemeral preview environments.
 According to Figure 3.3, upon opening or updating a pull request on GitHub, the preview deployment workflow executes. The runner connects to the staging host via Tailscale SSH, checks out the PR worktree, and provisions an isolated Docker Compose stack with dedicated project names. Traefik automatically routes inbound HTTPS traffic matching the preview subdomain to the preview containers, providing developers and reviewers with an immediate, live staging instance equipped with full valid TLS certificates and pre-seeded test accounts.
 
-\imageplaceholder{ci-cd-pipeline}{Screenshot of the GitHub Actions workflow pipeline showing parallel execution of test-api, test-tls, and ephemeral deploy-preview jobs}{Automated GitHub Actions CI/CD Pipeline}{ci_cd_pipeline.png}
+\imageplaceholder[0.26\textheight]{ci-cd-pipeline}{Screenshot of the GitHub Actions workflow pipeline showing parallel execution of test-api, test-tls, and ephemeral deploy-preview jobs}{Automated GitHub Actions CI/CD Pipeline}{ci_cd_pipeline.png}
 
 % ------------------------------------------------------------------------------
 % CONCLUSIONS
@@ -718,6 +691,9 @@ The software engineering internship project successfully designed, implemented, 
 
 The principal technical achievements realized throughout the internship project include:
 \begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\parsep}{0pt}
+  \setlength{\parskip}{0pt}
   \item the successful realization of a zero-knowledge threat model, ensuring that the central application backend acts solely as a blind ciphertext storage broker with zero visibility into plaintext secrets or decryption keys;
   \item the implementation of a robust browser-based hybrid encryption engine combining asymmetric RSA-OAEP 2048-bit key wrapping with symmetric AES-256-GCM authenticated encryption utilizing native W3C Web Crypto primitives;
   \item the eradication of destructive race conditions and link-crawler vulnerabilities through the design of an atomic Redis Lua single-delivery script;
@@ -728,6 +704,9 @@ The principal technical achievements realized throughout the internship project 
 
 Despite these substantial achievements, certain operational and architectural limitations remain identified for future iterations:
 \begin{itemize}
+  \setlength{\itemsep}{0pt}
+  \setlength{\parsep}{0pt}
+  \setlength{\parskip}{0pt}
   \item \textbf{Device-Specific Decryption Guard:} currently, if a recipient opens a secret on a browser whose device key was not included during encryption (e.g., a newly installed browser), the secret is burned upon retrieval and decryption fails locally. A future enhancement should require the client to supply its registered device identifier during reveal, allowing the server to refuse the request without burning if no matching key exists;
   \item \textbf{Non-Extractable CryptoKey Objects:} while private keys are currently isolated within client IndexedDB storage, generating them as non-extractable CryptoKey handles will provide hardened resilience against potential cross-site scripting (XSS) extraction;
   \item \textbf{User Public Key Enumeration Protection:} the public key retrieval endpoint currently returns HTTP 404 when a user does not exist, permitting username enumeration. Requiring authentication or returning a uniform response structure will eliminate this exposure vector;
@@ -741,7 +720,10 @@ In conclusion, SecretShare proves that uncompromising cryptographic security, ze
 % ------------------------------------------------------------------------------
 \unnumberedsection{REFERENCES}
 
+{\fontsize{10.5pt}{13pt}\selectfont\singlespacing
 \begin{enumerate}
+\setlength{\itemsep}{3pt}
+\setlength{\parskip}{0pt}
 \def\labelenumi{[\arabic{enumi}]}
 \item E. Rescorla, ``The Transport Layer Security (TLS) Protocol Version 1.3,'' RFC 8446, Internet Engineering Task Force (IETF), Aug. 2018. Available: \url{https://www.rfc-editor.org/rfc/rfc8446}.
 \item D. Dworkin, ``Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC,'' NIST Special Publication 800-38D, National Institute of Standards and Technology, Gaithersburg, MD, Nov. 2007.
@@ -758,21 +740,26 @@ In conclusion, SecretShare proves that uncompromising cryptographic security, ze
 \item Traefik Labs, ``Traefik Proxy: The Cloud Native Application Proxy,'' Traefik Documentation, 2024. Available: \url{https://doc.traefik.io/traefik/}.
 \item Tailscale Inc., ``Tailscale MagicDNS and Ephemeral HTTPS Certificates Architecture,'' Tailscale Documentation, 2024. Available: \url{https://tailscale.com/kb/}.
 \end{enumerate}
+}
 
 % ------------------------------------------------------------------------------
 % APPENDICES
 % ------------------------------------------------------------------------------
 \startappendix{APPENDIX A}{System Sequence Diagrams}
+\setcounter{figure}{0}
+\renewcommand{\thefigure}{A.\arabic{figure}}
 
 According to Figure A.1, the comprehensive end-to-end secret creation and retrieval life cycle coordinates user agent interactions, asynchronous backend verification, Keycloak identity validation, and Redis atomic operations.
 
-\imageplaceholder{appendix-full-sequence}{Complete end-to-end UML sequence diagram combining Sender encryption, Keycloak OIDC login, existence verification, atomic Lua burn, and recipient local decryption}{Complete End-to-End System Interaction Sequence}{appendix_full_sequence.png}
+\imageplaceholder[0.55\textheight]{appendix-full-sequence}{Complete end-to-end UML sequence diagram combining Sender encryption, Keycloak OIDC login, existence verification, atomic Lua burn, and recipient local decryption}{Complete End-to-End System Interaction Sequence}{appendix_full_sequence.png}
 
 \startappendix{APPENDIX B}{Architectural Topology and Database Schemas}
+\setcounter{figure}{0}
+\renewcommand{\thefigure}{B.\arabic{figure}}
 
 According to Figure B.1, the relational entity-relationship model depicts the relationships between registered users, device public keys, and partitioned security audit events.
 
-\imageplaceholder{appendix-er-diagram}{Entity Relationship (ER) diagram showing users, device\_keys, and audit\_events tables with foreign keys and check constraints}{Relational Database Entity Relationship Schema}{appendix_er_diagram.png}
+\imageplaceholder[0.55\textheight]{appendix-er-diagram}{Entity Relationship (ER) diagram showing users, device\_keys, and audit\_events tables with foreign keys and check constraints}{Relational Database Entity Relationship Schema}{appendix_er_diagram.png}
 
 \startappendix{APPENDIX C}{Core Cryptographic and Ephemeral Storage Source Code}
 
