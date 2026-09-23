@@ -548,7 +548,7 @@ The structure of the system is described by a component diagram, which shows the
 
 \diagram{component}{Component diagram of SecretShare}{fig:component}{According to Figure~2.4, SecretShare consists of five runtime components behind a single edge router, plus a start-up component that prepares certificates; all of them run as containers started together by Docker Compose.}
 
-Traefik is the only component exposed to the network \cite{traefik}. It routes requests by path prefix: \texttt{/api} goes to the FastAPI service, \texttt{/keycloak} to the identity provider and all other paths to the Next.js web application. Because every component is reached through the same origin, the browser's same-origin policy and the Content Security Policy can be as strict as \texttt{'self'}, and no cross-origin resource sharing is needed. In preview and staging environments Tailscale Serve terminates HTTPS in front of Traefik and gives each environment its own host name with a valid certificate \cite{tailscaleserve}. A secure context is not optional here: the Web Cryptography API is available only on HTTPS pages or on \texttt{localhost}.
+Traefik is the only component exposed to the network \cite{traefik}. It routes requests by path prefix: \texttt{/api} goes to the FastAPI service, except \texttt{/api/auth}, which Auth.js serves from the web application, \texttt{/keycloak} goes to the identity provider and all other paths to the Next.js web application. In the local configuration Traefik also publishes its dashboard on port 8080 without authentication, and the Keycloak administration console is reachable under \texttt{/keycloak/admin}; both are limitations recorded in Section~3.3. Because every component is reached through the same origin, the browser's same-origin policy and the Content Security Policy can be as strict as \texttt{'self'}, and no cross-origin resource sharing is needed. In preview environments Tailscale Serve terminates HTTPS in front of Traefik and gives each environment its own host name with a valid certificate \cite{tailscaleserve}; the staging server runs the local configuration over plain HTTP. A secure context is not optional here: the Web Cryptography API is available only on HTTPS pages or on \texttt{localhost}.
 
 The web component is a Next.js application \cite{nextjs} that serves the user interface and uses Auth.js to run the OpenID Connect sign-in with Keycloak \cite{authjs}. All cryptographic work runs in the user's browser, in the modules shown in the upper part of Figure~2.4.
 
@@ -558,7 +558,7 @@ Keycloak is the identity provider \cite{keycloak}. It holds the user accounts, p
 
 Redis holds the encrypted envelopes, each under the key \texttt{s:<payload\_id>} with an expiry equal to the lifetime of the secret. Redis is used only as volatile storage, so an unread secret disappears without any clean-up job.
 
-PostgreSQL holds the data that must persist: the users known to the relay, their device public keys and the audit log. The data model is shown in Appendix~B. It contains three tables. The \texttt{users} table identifies a person by a platform and a platform-specific user name, which prepares the model for chat platforms. The \texttt{device\_keys} table stores public keys only, with a \texttt{revoked\_at} column that marks keys that are no longer active. The \texttt{audit\_events} table is append-only and is described in Chapter~3.
+PostgreSQL holds the data that must persist: the users known to the relay, their device public keys and the audit log. The data model is shown in Appendix~B. It contains three tables. The \texttt{users} table identifies a person by a platform and a platform-specific user name, which prepares the model for chat platforms. The \texttt{device\_keys} table stores public keys only, with a \texttt{revoked\_at} column that marks keys that are no longer active. The \texttt{audit\_events} table is append-only and is described in Chapter~3. The same PostgreSQL server also hosts the Keycloak database, and both are accessed with one database account.
 
 The \texttt{tls-init} component runs once at start-up. It creates a private certificate authority and issues server certificates for PostgreSQL and Redis. The API connects to both data stores over TLS and verifies their certificates against this authority; Redis listens only on its TLS port, with the plaintext port disabled. The TLS is not mutual: the data stores do not ask the API for a client certificate. PostgreSQL authenticates the API with a password, whereas Redis currently accepts any TLS client on the internal network without authentication, which is recorded as a limitation in Section~3.3.
 
@@ -697,10 +697,10 @@ These protections are verified by the test harness in \texttt{web/tests/security
 
 \subsec{Backend Architecture and API Routing}
 
-The API is a FastAPI application built with Python 3.12. Application configuration is managed centrally by a unified Pydantic settings class that validates environment parameters at launch, rejecting conflicting lifetime limits, invalid CIDR proxy blocks, or missing OIDC/database credentials. Database schema migrations are executed automatically by Alembic during container initialization, halting startup upon migration failure.
+The API is a FastAPI application built with Python 3.12. A Pydantic settings class validates the configuration at launch and rejects conflicting lifetime limits and invalid CIDR proxy blocks; missing OIDC or database settings are rejected only in production mode, which the compose files do not yet enable. Database schema migrations are executed automatically by Alembic during container initialization, halting startup upon migration failure.
 
 \begin{table}[H]
-\leadin{As shown in Table~3.1, the API exposes six endpoints, and the identifier of a secret is accepted only in request bodies.}
+\leadin{As shown in Table~3.1, the API exposes eight endpoints in addition to the generated OpenAPI documentation, and the identifier of a secret is accepted only in request bodies.}
 \tablesetup
 \caption{Endpoints of the API}
 \label{tab:api}
@@ -713,20 +713,22 @@ The API is a FastAPI application built with Python 3.12. Application configurati
 \texttt{POST /api/secrets/exists} & none & reports whether a secret exists without changing it \\ \hline
 \texttt{POST /api/secrets/reveal} & token & 200 with envelope, 403 for another user (secret kept), 404 otherwise \\ \hline
 \texttt{GET /api/health} & none & liveness check \\ \hline
+\texttt{GET /api/me} & token & returns the caller's token claims (diagnostic) \\ \hline
+\texttt{GET /api/} & none & static welcome message \\ \hline
 \end{tabularx}
 \end{table}
 
-Errors are mapped centrally. Missing, burned, or expired secrets uniformly yield a generic 404 response without distinguishing expiration from non-existence, preventing adversaries from enumerating secret history. Redis connection loss produces a 503 response with a \texttt{Retry-After} header. Schema validation errors return 422 while strictly suppressing rejected payload bodies, ensuring malformed secrets are never echoed or persisted in external logs.
+Errors are mapped centrally. Missing, burned and expired secrets yield one generic 404 response, so the history of an identifier cannot be enumerated. Redis connection loss produces a 503 response with a \texttt{Retry-After} header. Schema validation errors return 422 while strictly suppressing rejected payload bodies, ensuring malformed secrets are never echoed or persisted in external logs.
 
-Three custom middleware layers wrap the application pipeline. A payload size filter validates declared lengths and received bytes, aborting requests exceeding 64~KB with status 413 prior to parsing. A trusted proxy layer processes \texttt{X-Forwarded-For} headers strictly from designated CIDR ranges, selecting the right-most untrusted IP address to thwart client header spoofing. Additionally, a security header middleware injects \texttt{Cache-Control: no-store}, \texttt{X-Content-Type-Options: nosniff}, anti-framing headers, and restrictive CSP headers on all responses.
+Three custom middleware layers wrap the application pipeline. A payload size filter validates declared lengths and received bytes, aborting requests above 65~KB (64~KB plus the JSON structure) with status 413 before parsing. A trusted proxy layer processes \texttt{X-Forwarded-For} headers strictly from designated CIDR ranges, selecting the right-most untrusted IP address to thwart client header spoofing. Additionally, a security header middleware injects \texttt{Cache-Control: no-store}, \texttt{X-Content-Type-Options: nosniff}, anti-framing headers, and restrictive CSP headers on all responses.
 
-Rate limiting is enforced using fixed one-minute sliding windows in Redis: clients are limited to 10 secret creations and 30 existence/reveal checks per minute (exceeding requests receive 429 with \texttt{Retry-After}). If Redis becomes unreachable, the rate limiter fails open with warning logs to preserve core service availability.
+Rate limiting is enforced using fixed one-minute windows in Redis: clients are limited to 10 secret creations and 30 existence/reveal checks per minute (exceeding requests receive 429 with \texttt{Retry-After}). If Redis becomes unreachable, the rate limiter fails open with warning logs to preserve core service availability.
 
-Key registration maintains cryptographic freshness while bounding registry size. When a client registers a device public key, the endpoint revokes prior keys for that platform, effectively binding each user to their most recently authenticated browser. Secrets dispatched prior to a browser migration remain readable solely on the originating device, a trade-off evaluated further in the Conclusions.
+When a client registers a device public key, the endpoint revokes prior keys for that platform, which binds each user to the most recently registered browser. Secrets sent before a change of browser remain readable only on the previous browser.
 
 \subsec{Security Controls}
 
-The DAS brief requires teams to explain, for each security measure, the problem it addresses, why it is relevant, how it is implemented, how it was tested and what remains open \cite{dasbrief}. The team kept these explanations in the repository for each control, and they are summarised here.
+The DAS brief requires teams to explain, for each security measure, the problem it addresses, why it is relevant, how it is implemented, how it was tested and what remains open \cite{dasbrief}. These explanations are kept in the repository for each control \cite{secretsharerepo} and are summarised here.
 
 \begin{table}[H]
 \leadin{As shown in Table~3.2, the controls go beyond the cryptographic core and cover logging, authentication and the web page itself.}
@@ -741,14 +743,14 @@ Audit without secret material & 8-character prefix, enforced also by a \texttt{v
 Append-only audit log & database trigger raises on UPDATE and DELETE & UPDATE and DELETE fail, row unchanged \\ \hline
 Audit does not weaken responses & audit write errors are logged and ignored & broken database still yields 201, 200 and 404 with identical bodies \\ \hline
 Uniform authentication errors & one constant message for every invalid token, details only in the server log & six token faults give byte-identical bodies \\ \hline
-Content Security Policy & per-request nonce, \texttt{strict-dynamic}, no \texttt{unsafe-inline} for scripts & injected inline script blocked in a headless browser \\ \hline
+Content Security Policy & per-request nonce, \texttt{strict-dynamic}, no \texttt{unsafe-inline} for scripts & automated policy test; blocked script confirmed in headless Chromium \\ \hline
 Internal TLS & CA-verified TLS from the API to Redis and PostgreSQL & 18 tests of certificates and client settings \\ \hline
 \end{tabularx}
 \end{table}
 
 The first control is the result of a vulnerability that the team found in its own code. An early version served secrets at \texttt{GET /secrets/\{id\}}, and during end-to-end testing the full 43-character identifier appeared in the Uvicorn access log, next to an audit table that carefully stored only 8 characters. Anyone with access to the logs or their backups could have read unconsumed secrets. The identifier was moved into the request body, which no access log records, and a logging filter was added as a second layer for old bookmarked links and for exception messages. This follows the general guidance that logs must not contain session identifiers, access tokens or sensitive data \cite{owasplogging}.
 
-The Content Security Policy addresses the risk identified in Table~1.1: a script injected into the page could read the plaintext before encryption, which would defeat the whole design. The policy allows only scripts that carry a nonce generated for the current response, forbids plugins and framing, and restricts all connections to the same origin, which is possible because Traefik serves every component under one host \cite{csp3}. The test replays the real policy over a page containing an injected script and confirms in a headless Chromium browser that the script does not run and that a violation event is raised.
+The Content Security Policy addresses the risk identified in Table~1.1: a script injected into the page could read the plaintext before encryption, which would defeat the whole design. The policy allows only scripts that carry a nonce generated for the current response, forbids plugins and framing, and restricts all connections to the same origin, which is possible because Traefik serves every component under one host \cite{csp3}. An automated test replays the real policy over a page containing an injected script and checks that the policy cannot permit it; a manual run in headless Chromium confirmed that the script does not run and that a violation event is raised.
 
 The uniform authentication error closes an information leak in the token validation. Originally the 401 response contained the message of the underlying library, such as an unknown key identifier or an expired signature, which told an attacker which part of a forged token was wrong. Every rejected token now receives the same message, and the reason is written only to the server log, without the token itself. Error messages that reveal internal details are a typical example of the weaknesses listed by OWASP \cite{owasptop10}.
 
@@ -775,7 +777,7 @@ Testing was treated as part of every change: a security control was considered c
 \nolinkurl{test_config.py}, \nolinkurl{test_proxy.py} & 38 & settings validation, trusted proxy handling \\ \hline
 \nolinkurl{test_tls.py} & 18 & certificate generation, permissions, TLS client settings \\ \hline
 \nolinkurl{test_oauth_integration.py} & 5 & live token flow against Keycloak \\ \hline
-\nolinkurl{csp.test.mjs} (web client) & 10 & CSP headers, nonce uniqueness, blocked injected script \\ \hline
+\nolinkurl{csp.test.mjs} (web client) & 10 & CSP headers, nonce uniqueness, policy refuses an injected script \\ \hline
 \end{tabularx}
 \end{table}
 
@@ -790,7 +792,7 @@ Testing was treated as part of every change: a security control was considered c
 Test API & pull requests; pushes to main, develop and feature branches & migrations, unit and security tests, failure if any security test is skipped; then the full stack in Docker with routing checks and live OAuth tests \\ \hline
 Test TLS & same as Test API & certificate script and TLS client tests \\ \hline
 PR Preview & pull request opened, updated or closed & deploys an isolated stack for the pull request over Tailscale SSH, runs smoke tests for routing, documentation, sign-in and the secret life cycle; removes the stack when the pull request closes \\ \hline
-Deploy Staging & manual, main branch only & deploys main to the staging server \\ \hline
+Deploy Staging & manual, main branch only & deploys main to staging; currently failing \\ \hline
 Build Report & pushes to report branches & compiles the LaTeX report and publishes the PDF \\ \hline
 \end{tabularx}
 \end{table}
