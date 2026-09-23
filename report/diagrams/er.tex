@@ -1,0 +1,49 @@
+% Entity-relationship diagram matching api/app/db/models.py and the Alembic migrations.
+\begin{tikzpicture}
+  \node[draw, fill=white, inner sep=0pt, anchor=north] (users) at (0,0) {\footnotesize
+    \begin{tabular}{@{\hspace{4pt}}l@{\hspace{8pt}}l@{\hspace{4pt}}}
+      \multicolumn{2}{c}{\bfseries users}\\\hline
+      \textbf{id} & uuid, PK\\
+      platform & text, CHECK in (slack, teams,\\
+               & keycloak, web)\\
+      platform\_user\_id & text\\
+      workspace\_id & text, nullable\\
+      created\_at & timestamptz, now()\\\hline
+      \multicolumn{2}{l}{UNIQUE (platform, platform\_user\_id)}
+    \end{tabular}};
+
+  \node[draw, fill=white, inner sep=0pt, anchor=north] (keys) at (9.2,1.2) {\footnotesize
+    \begin{tabular}{@{\hspace{4pt}}l@{\hspace{8pt}}l@{\hspace{4pt}}}
+      \multicolumn{2}{c}{\bfseries device\_keys}\\\hline
+      \textbf{id} & uuid, PK\\
+      user\_id & uuid, FK $\to$ users.id,\\
+               & ON DELETE CASCADE\\
+      platform & text, default web\\
+      public\_key & text, SPKI PEM\\
+      label & text, nullable\\
+      created\_at & timestamptz, now()\\
+      revoked\_at & timestamptz, NULL = active\\\hline
+      \multicolumn{2}{l}{INDEX (user\_id)}
+    \end{tabular}};
+
+  \node[draw, fill=white, inner sep=0pt, anchor=north] (audit) at (9.2,-4.4) {\footnotesize
+    \begin{tabular}{@{\hspace{4pt}}l@{\hspace{8pt}}l@{\hspace{4pt}}}
+      \multicolumn{2}{c}{\bfseries audit\_events}\\\hline
+      \textbf{id} & bigint, PK, autoincrement\\
+      event\_type & text, CHECK in (created, revealed,\\
+                  & expired, denied)\\
+      payload\_id\_prefix & varchar(8), CHECK length $\le$ 8\\
+      actor\_user\_id & uuid, FK $\to$ users.id,\\
+                      & ON DELETE SET NULL\\
+      ip & inet, nullable\\
+      user\_agent & text, nullable\\
+      created\_at & timestamptz, now()\\\hline
+      \multicolumn{2}{l}{INDEX (created\_at), INDEX (payload\_id\_prefix)}\\
+      \multicolumn{2}{l}{trigger: BEFORE UPDATE OR DELETE raises}
+    \end{tabular}};
+
+  \draw[semithick] (users.east |- 0,-0.9) -- node[above, font=\scriptsize]{1} ++(0.6,0)
+        |- node[pos=0.75, above, font=\scriptsize]{0..*} (keys.west);
+  \draw[semithick, dashed] (users.east |- 0,-2.3) -- node[above, font=\scriptsize]{0..1} ++(0.6,0)
+        |- node[pos=0.75, above, font=\scriptsize]{0..*} (audit.west);
+\end{tikzpicture}

@@ -1,0 +1,32 @@
+\begin{tikzpicture}
+  \def\xB{1.3}\def\xK{5.2}\def\xA{9.0}\def\xR{12.8}\def\xD{16.4}
+  \seqlife{b}{\xB}{Recipient\\browser}{-14.0}
+  \seqlife{k}{\xK}{Keycloak}{-14.0}
+  \seqlife{a}{\xA}{FastAPI}{-14.0}
+  \seqlife{r}{\xR}{Redis}{-14.0}
+  \seqlife{d}{\xD}{PostgreSQL}{-14.0}
+
+  \seqmsg{\xB}{\xA}{-1.2}{1: POST /api/secrets/exists \{payload\_id\}}
+  \seqmsg{\xA}{\xR}{-1.9}{2: EXISTS s:\ssl id\ssr}
+  \seqret{\xR}{\xA}{-2.6}{3: 1}
+  \seqret{\xA}{\xB}{-3.3}{4: 200 \{exists: true\}}
+  \seqnote{\xB+1.2}{-3.6}{burn-after-reading\\warning is shown}
+
+  % optional sign-in fragment
+  \draw[frag] (\xB-1.0,-4.65) rectangle (\xK+1.1,-7.0);
+  \node[anchor=north west, font=\scriptsize\bfseries, draw, fill=white, inner sep=2pt]
+    at (\xB-1.0,-4.65) {opt [not signed in]};
+  \seqmsg{\xB}{\xK}{-6.0}{5: authorization code\\ flow with PKCE}
+  \seqret{\xK}{\xB}{-6.7}{6: access token (JWT)}
+
+  \seqmsg{\xB}{\xA}{-7.8}{7: POST /api/secrets/reveal \{payload\_id\}, Bearer JWT}
+  \seqnote{\xA}{-8.05}{verify RS256 signature (JWKS),\\audience; caller $\leftarrow$ preferred\_username}
+  \seqmsg{\xA}{\xR}{-9.8}{8: EVAL burn script}
+  \seqret{\xR}{\xA}{-11.0}{9: burned + envelope\\ $\mid$ denied $\mid$ missing}
+  \seqmsg{\xA}{\xD}{-11.7}{10: INSERT audit\_events (revealed $\mid$ denied)}
+  \seqret{\xA}{\xB}{-12.4}{11: 200 envelope $\mid$ 403 $\mid$ 404}
+  \seqnote{\xB+2.2}{-12.7}{%
+    $SK \leftarrow$ private key from IndexedDB\\
+    $K \leftarrow$ RSA-OAEP-decrypt$(SK, W_j)$\\
+    \textit{plaintext} $\leftarrow$ AES-GCM-decrypt$(K, IV, C)$}
+\end{tikzpicture}

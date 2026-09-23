@@ -1,0 +1,32 @@
+\begin{tikzpicture}
+  \node[usecase] (signin)   at (8.1, 6.1) {Sign in through\\Keycloak (OIDC)};
+  \node[usecase] (register) at (8.1, 4.4) {Register device\\public key};
+  \node[usecase] (expire)   at (8.1,-0.4) {Expire unread\\secret};
+  \node[usecase] (create)   at (3.8, 2.5) {Create encrypted\\secret};
+  \node[usecase] (lookup)   at (3.8, 0.8) {Look up recipient\\device keys};
+  \node[usecase] (open)     at (12.4, 2.5) {Open share link};
+  \node[usecase] (exists)   at (12.4, 1.05) {Check that the\\secret exists};
+  \node[usecase] (reveal)   at (12.4,-0.4) {Reveal and burn\\secret};
+  \node[usecase] (decrypt)  at (12.4,-2.0) {Decrypt secret\\in the browser};
+
+  \node[sysbox, fit=(signin)(lookup)(open)(decrypt)(create)(expire),
+        label={[font=\small\bfseries, anchor=north west]north west:SecretShare}] (sys) {};
+
+  \umlactor{sender}{0.2,3.4}{Sender}
+  \umlactor{recipient}{16.4,3.3}{Recipient}
+  \umlactor{idp}{16.4,6.4}{Keycloak\\(identity provider)}
+  \umlactor{timer}{8.1,-4.4}{Redis TTL\\(timer)}
+
+  \draw (sender-c) -- (signin.west);
+  \draw (sender-c) -- (create.west);
+  \draw (recipient-c) -- (signin.south east);
+  \draw (recipient-c) -- (open.east);
+  \draw (recipient-c) -- (reveal.east);
+  \draw (idp-c) -- (signin.north east);
+  \draw (expire.south) -- ($(timer-c)+(0,0.66)$);
+
+  \draw[rel] (signin) -- node[right]{\guillemotleft include\guillemotright} (register);
+  \draw[rel] (create) -- node[right]{\guillemotleft include\guillemotright} (lookup);
+  \draw[rel] (open) -- node[right]{\guillemotleft include\guillemotright} (exists);
+  \draw[rel] (reveal) -- node[right]{\guillemotleft include\guillemotright} (decrypt);
+\end{tikzpicture}

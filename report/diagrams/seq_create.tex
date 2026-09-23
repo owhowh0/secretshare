@@ -1,0 +1,26 @@
+\begin{tikzpicture}
+  \def\xB{1.3}\def\xA{6.6}\def\xD{11.6}\def\xR{15.8}
+  \seqlife{b}{\xB}{Sender browser}{-11.3}
+  \seqlife{a}{\xA}{FastAPI}{-11.3}
+  \seqlife{d}{\xD}{PostgreSQL}{-11.3}
+  \seqlife{r}{\xR}{Redis}{-11.3}
+
+  \seqmsg{\xB}{\xA}{-1.1}{1: GET /api/keys/\{recipient\_id\}}
+  \seqmsg{\xA}{\xD}{-1.8}{2: select non-revoked device keys}
+  \seqret{\xD}{\xA}{-2.5}{3: device key rows}
+  \seqret{\xA}{\xB}{-3.2}{4: 200 \{user\_id, keys[ ]\}}
+
+  \seqnote{\xB+1.9}{-3.55}{%
+    $K \leftarrow$ 32 random bytes, $IV \leftarrow$ 12 random bytes\\
+    $C \leftarrow$ AES-256-GCM$(K, IV, \textit{plaintext})$\\
+    for every device key $PK_j$: $W_j \leftarrow$ RSA-OAEP$(PK_j, K)$}
+
+  \seqmsg{\xB}{\xA}{-6.5}{5: POST /api/secrets\\ \{recipient\_id, encrypted\_keys[ ],\\ iv, ciphertext, ttl\_seconds\}}
+  \seqnote{\xA+0.1}{-6.8}{%
+    body $\le$ 64 KB, TTL within 300--86\,400 s\\
+    payload\_id $\leftarrow$ token\_urlsafe(32)}
+  \seqmsg{\xA}{\xR}{-8.3}{6: SET s:\ssl payload\_id\ssr{} envelope EX ttl}
+  \seqmsg{\xA}{\xD}{-9.0}{7: INSERT audit\_events (created, 8-character prefix)}
+  \seqret{\xA}{\xB}{-9.7}{8: 201 \{payload\_id, expires\_at\}}
+  \seqnote{\xB+1.9}{-10.0}{share link /?id=\ssl payload\_id\ssr{} is copied}
+\end{tikzpicture}

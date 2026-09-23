@@ -1,0 +1,48 @@
+\begin{tikzpicture}
+  % --- browser ---------------------------------------------------------------
+  \node[subcomp, minimum width=40mm] (ui)  at (4.8, 9.0) {UI and flow control\\(app/page.tsx)};
+  \node[subcomp, minimum width=40mm] (cry) at (9.3, 9.0) {hybrid encryption\\(lib/crypto.ts, Web Crypto API)};
+  \node[subcomp, minimum width=40mm] (ks)  at (13.8, 9.0) {device key store\\(lib/key-store.ts, IndexedDB)};
+  \begin{scope}[on background layer]
+    \node[comp, fit={(ui)(ks)($(cry.north)+(0,0.5)$)}, inner xsep=3mm, inner ysep=2mm,
+          label={[font=\footnotesize\bfseries, anchor=north west]north west:Browser (user agent)}] (browser) {};
+  \end{scope}
+
+  % --- edge ------------------------------------------------------------------
+  \node[comp, minimum width=44mm] (traefik) at (9.3, 6.6) {\textbf{Traefik}\\path-based edge router};
+  \compglyph{traefik}
+
+  % --- application tier ------------------------------------------------------
+  \node[comp, minimum width=32mm] (web) at (2.0, 3.9) {\textbf{web}\\Next.js 15,\\Auth.js (NextAuth v5)};
+  \compglyph{web}
+  \node[comp, minimum width=30mm] (kc) at (16.6, 3.9) {\textbf{Keycloak 26}\\OIDC identity\\provider};
+  \compglyph{kc}
+
+  \node[subcomp, minimum width=28mm] (mw)  at (6.3, 4.2) {middleware: body limit,\\proxy, headers};
+  \node[subcomp, minimum width=28mm] (rt)  at (9.3, 4.2) {routes: /secrets, /keys,\\rate limits};
+  \node[subcomp, minimum width=28mm] (au)  at (12.3, 4.2) {auth: JWT (RS256)\\via JWKS};
+  \node[subcomp, minimum width=28mm] (svc) at (6.3, 3.0) {SecretService,\\KeyService};
+  \node[subcomp, minimum width=28mm] (st)  at (9.3, 3.0) {SecretStore\\(Lua burn script)};
+  \node[subcomp, minimum width=28mm] (aud) at (12.3, 3.0) {AuditService\\(8-character prefix)};
+  \begin{scope}[on background layer]
+    \node[comp, fit={(mw)(aud)($(rt.north)+(0,0.5)$)}, inner xsep=2.5mm, inner ysep=2mm,
+          label={[font=\footnotesize\bfseries, anchor=north west]north west:api: FastAPI (Python 3.12)}] (api) {};
+  \end{scope}
+
+  % --- data tier -------------------------------------------------------------
+  \node[store] (redis) at (6.3, -0.1) {Redis 7\\envelopes, TTL};
+  \node[store] (pg)    at (12.3, -0.1) {PostgreSQL 16\\users, device\_keys,\\audit\_events};
+  \node[comp, minimum width=28mm] (tls) at (9.3, -1.9) {\textbf{tls-init}\\internal CA};
+  \compglyph{tls}
+
+  % --- connectors ------------------------------------------------------------
+  \draw[link] (browser.south) -- node[linklabel, right=1mm]{HTTPS} (traefik.north);
+  \draw[link] (traefik.south west) -- node[linklabel, pos=0.3]{/} (web.north east);
+  \draw[link] (traefik.south) -- node[linklabel, pos=0.4]{/api} (api.north);
+  \draw[link] (traefik.south east) -- node[linklabel, pos=0.3]{/keycloak} (kc.north west);
+  \draw[link] (api.east |- kc.west) -- node[linklabel, above=1mm]{JWKS} (kc.west);
+  \draw[link] (st.south |- api.south) -- node[linklabel, pos=0.5]{TLS, CA-verified} (redis.north east);
+  \draw[link] (aud.south |- api.south) -- node[linklabel, pos=0.5]{TLS, CA-verified} (pg.north);
+  \draw[link, dashed] (tls.west) -| node[linklabel, pos=0.3, below]{certificates} (redis.south);
+  \draw[link, dashed] (tls.east) -| node[linklabel, pos=0.3, below]{certificates} (pg.south);
+\end{tikzpicture}

@@ -1,0 +1,22 @@
+\begin{tikzpicture}
+  \def\xB{1.3}\def\xK{5.6}\def\xA{10.6}\def\xD{15.6}
+  \seqlife{b}{\xB}{Browser}{-11.4}
+  \seqlife{k}{\xK}{Keycloak}{-11.4}
+  \seqlife{a}{\xA}{FastAPI}{-11.4}
+  \seqlife{d}{\xD}{PostgreSQL}{-11.4}
+
+  \seqmsg{\xB}{\xK}{-1.3}{1: authorization code\\ flow with PKCE}
+  \seqret{\xK}{\xB}{-2.1}{2: ID and access tokens}
+  \seqnote{\xB+2.1}{-2.45}{%
+    look up the key pair stored for the username in IndexedDB\\
+    if none: generate RSA-OAEP 2048-bit pair, SHA-256, $e = 65537$\\
+    store the pair in IndexedDB; export the public key as SPKI PEM}
+
+  \seqmsg{\xB}{\xA}{-5.1}{3: POST /api/keys/register\\ \{public\_key, platform: web, label\}, Bearer JWT}
+  \seqnote{\xA}{-5.4}{verify JWT (RS256, JWKS, audience)\\user id $\leftarrow$ preferred\_username (or sub)}
+  \seqmsg{\xA}{\xD}{-7.0}{4: get or create users row}
+  \seqmsg{\xA}{\xD}{-7.7}{5: revoke previous active key}
+  \seqmsg{\xA}{\xD}{-8.4}{6: INSERT device\_keys}
+  \seqret{\xA}{\xB}{-9.2}{7: 201 \{device\_id, platform, public\_key, label, created\_at\}}
+  \seqnote{\xB+1.6}{-9.5}{device\_id saved\\next to the key pair}
+\end{tikzpicture}
