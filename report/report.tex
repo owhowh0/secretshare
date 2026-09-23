@@ -163,7 +163,7 @@
     \leadin{#4}
     \centering
     \IfFileExists{#1}{%
-      \includegraphics[width=0.85\textwidth,keepaspectratio]{#1}%
+      \includegraphics[width=0.72\textwidth,keepaspectratio]{#1}%
     }{%
       \setlength{\fboxsep}{14pt}%
       \fbox{\parbox{0.82\textwidth}{\centering
@@ -434,6 +434,7 @@ Following the DAS brief \cite{dasbrief}, the team implemented in September the m
 
 % ------------------------------------------------------------------------------
 \subsec{Market Research}
+\enlargethispage{2\baselineskip}
 
 The concept was compared with four tools whose design is documented by their authors, so that the comparison relies on primary sources.
 
@@ -641,23 +642,41 @@ The SecretShare frontend is implemented as a single-page web application using N
 
 Client-side cryptographic routines interface directly with the standard Web Cryptography API (\texttt{window.crypto.subtle}) in \texttt{lib/crypto.ts} without external dependencies. On initial sign-in via Keycloak, the browser checks for an existing RSA-OAEP 2048-bit key pair in local storage. If absent, it generates a new pair, exports the public key in SubjectPublicKeyInfo (SPKI) format, and registers it with the API, storing the private key securely inside IndexedDB under \texttt{secretshare\_keystore} indexed by user identity.
 
-When creating a secret, the user enters the sensitive plaintext, selects the designated recipient from the organization directory, and specifies an expiration lifetime between 5 minutes and 24 hours. The browser generates a random 256-bit AES-GCM content encryption key, encrypts the plaintext locally with a fresh 96-bit initialization vector, wraps the symmetric key using the public keys of the recipient's active devices, and transmits the resulting envelope to \texttt{POST /api/secrets}.
+The user interface partitions both secret creation and secret retrieval into two sequential, verifiable actions. For secret creation, the first action requires configuring the secret payload and parameters, while the second action displays the resulting ephemeral link.
 
-\screenshot{images/screenshots/secret_create.png}%
-  {Secret creation and link sharing interface}%
-  {fig:secret_create}%
-  {As shown in Figure~3.1, the secret creation interface provides an intuitive form where the user enters the sensitive payload, selects the intended recipient, configures the expiration window, and generates an ephemeral link.}%
-  {Figure 3.1: Secret Creation Interface}%
-  {Take a screenshot of the main web application page with the secret input textarea, recipient user selection field, TTL expiration selector, and the generated share link with the copy button.}
+\screenshot{images/screenshots/secret_create1.png}%
+  {Secret composition form with recipient selection and expiration configuration}%
+  {fig:secret_create_form}%
+  {As shown in Figure~3.1, the secret composition interface provides input fields where the user enters the sensitive plaintext, selects the designated recipient from the organization directory, and configures an expiration window between 5 minutes and 24 hours, while the status banner verifies that the local device key is registered for end-to-end encryption.}%
+  {Figure 3.1: Secret Composition Interface}%
+  {Secret composition form displaying recipient selection, secret input, expiration configuration, and cryptographic readiness indicator.}
 
-Retrieving a secret follows a two-stage flow to prevent automated link crawlers from consuming ephemeral secrets. When navigating to a share link carrying the secret identifier, the web page initiates a non-destructive existence check via \texttt{POST /api/secrets/exists}. Upon positive confirmation, the recipient is shown an explicit burn warning notification. Once the recipient confirms and authenticates via OpenID Connect, the client invokes \texttt{POST /api/secrets/reveal}, unwraps the content key using its local private key, and renders the decrypted secret in memory alongside a copy button and a memory-clearing action.
+When the sender triggers the creation action, the browser executes the hybrid encryption pipeline: it generates a random 256-bit AES-GCM content key, encrypts the plaintext with a fresh 96-bit initialization vector, wraps the key for each active recipient device, and transmits the envelope to \texttt{POST /api/secrets}.
 
-\screenshot{images/screenshots/secret_reveal.png}%
-  {Burn notice warning and revealed secret view}%
-  {fig:secret_reveal}%
-  {As shown in Figure~3.2, accessing the share link presents a non-destructive burn notice that warns the recipient prior to one-time retrieval and in-memory decryption.}%
-  {Figure 3.2: Burn Notice and Reveal Interface}%
-  {Take a screenshot of the secret access link view displaying the burn warning notification, the recipient confirmation button, and the subsequently revealed secret with memory-clearing options.}
+\screenshot{images/screenshots/secret_create2.png}%
+  {Generated ephemeral share link with one-click copy action}%
+  {fig:secret_create_link}%
+  {As shown in Figure~3.2, upon successful creation the interface presents the generated ephemeral share link alongside a one-click copy button, ready for distribution to the recipient.}%
+  {Figure 3.2: Generated Ephemeral Share Link}%
+  {Interface displaying the generated secret share URL with the one-click copy button.}
+
+Retrieving a secret likewise comprises two distinct operational phases designed to prevent accidental consumption by automated link previews. When navigating to a share link carrying the secret identifier, the web client performs a non-destructive existence check via \texttt{POST /api/secrets/exists}.
+
+\screenshot{images/screenshots/secret_reveal1.png}%
+  {Burn warning notification modal prior to secret retrieval}%
+  {fig:secret_reveal_warning}%
+  {As shown in Figure~3.3, upon confirming the existence of the secret, the interface displays an explicit burn-after-reading modal dialog that warns the recipient that revealing the secret will permanently and irreversibly destroy it from the server.}%
+  {Figure 3.3: Burn-After-Reading Warning Dialog}%
+  {Modal warning dialogue alerting the recipient of permanent server-side destruction prior to retrieval.}
+
+After the recipient confirms the warning and authenticates through OpenID Connect, the client submits the atomic retrieval request via \texttt{POST /api/secrets/reveal}. The server executes the atomic Lua verification and single-delivery deletion in Redis, returning the ciphertext envelope. The browser unwraps the symmetric key with its local private key, decrypts the ciphertext in memory, and renders the plaintext.
+
+\screenshot{images/screenshots/secret_reveal2.png}%
+  {Decrypted plaintext secret revealed in browser memory}%
+  {fig:secret_reveal_decrypted}%
+  {As shown in Figure~3.4, the decrypted secret is displayed within a dedicated view providing a copy button and a memory-clearing action, leaving no cached trace in browser storage or network history.}%
+  {Figure 3.4: Decrypted Secret Plaintext View}%
+  {Interface displaying the decrypted secret plaintext with one-click copy and memory-clearing controls.}
 
 \subsec{Backend Architecture and API Routing}
 
