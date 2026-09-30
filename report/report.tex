@@ -31,6 +31,7 @@
 \usepackage{enumitem}
 \usepackage{etoolbox}
 \usepackage{adjustbox}
+\usepackage{pdfpages}
 \usepackage{tikz}
 \input{diagrams/styles.tex}
 \usepackage{xurl}
@@ -181,6 +182,13 @@
   \end{figure}}
 
 % --- Appendix heading: "APPENDIX A" with the title centred beneath it ---
+\newcommand{\apptitleheader}[1]{%
+  \thispagestyle{fancy}%
+  \begin{picture}(0,0)%
+    \put(0, 18){\makebox(\textwidth, 0)[c]{\fontsize{13pt}{16pt}\selectfont\bfseries APPENDIX #1}}%
+  \end{picture}%
+}
+
 \newcommand{\startappendix}[3]{%
   \clearpage
   \phantomsection
@@ -896,5 +904,41 @@ export async function encryptAesKeyWithRsa(
   return arrayBufferToBase64(encryptedKeyBuffer)
 }
 \end{lstlisting}
+
+
+% ==============================================================================
+% INDIVIDUAL INTERNSHIP SUMMARY REPORTS
+% ==============================================================================
+
+% Appendix D: Cimendur Rustem
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{APPENDIX D -- Internship Summary Report: Cimendur Rustem}
+\includepdf[pages=1, scale=0.90, offset=0 -6mm, pagecommand={\apptitleheader{D}}]{summaries/SUMMARY_REPORT_en_Cimendur_Rustem.pdf}
+\includepdf[pages=2, scale=0.90, offset=0 -6mm, pagecommand={\thispagestyle{fancy}}]{summaries/SUMMARY_REPORT_en_Cimendur_Rustem.pdf}
+
+% Appendix E: Covali Ilie
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{APPENDIX E -- Internship Summary Report: Covali Ilie}
+\includepdf[pages=1, scale=0.90, offset=0 -6mm, pagecommand={\apptitleheader{E}}]{summaries/SUMMARY_REPORT_en_Covali_Ilie.pdf}
+
+% Appendix F: Kushnirenko Ekaterina
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{APPENDIX F -- Internship Summary Report: Kushnirenko Ekaterina}
+\includepdf[pages=1, scale=0.90, offset=0 -6mm, pagecommand={\apptitleheader{F}}]{summaries/SUMMARY_REPORT_en_Kushnirenko_Ekaterina.pdf}
+
+% Appendix G: Poiata Calin
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{APPENDIX G -- Internship Summary Report: Poiat\u{a} C\u{a}lin}
+\includepdf[pages=1, scale=0.90, offset=0 -6mm, pagecommand={\apptitleheader{G}}]{summaries/SUMMARY_REPORT_en_Poiata_Calin.pdf}
+
+% Appendix H: Soimu Ionut
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{APPENDIX H -- Internship Summary Report: \c{S}oimu Ionu\c{t}}
+\includepdf[pages=1, scale=0.90, offset=0 -6mm, pagecommand={\apptitleheader{H}}]{summaries/SUMMARY_REPORT_en_Soimu_Ionut.pdf}
 
 \end{document}
