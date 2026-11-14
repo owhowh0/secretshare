@@ -103,12 +103,14 @@ jobs:
           docker network create traefik-net || true
           POSTGRES_PWD=$(openssl rand -hex 16)
           KC_PWD=$(openssl rand -hex 16)
+          AUTH_SEC=$(openssl rand -hex 32)
           cat <<EOF > .env
           POSTGRES_USER=secretshare
           POSTGRES_PASSWORD=${POSTGRES_PWD}
           POSTGRES_DB=secretshare
           KEYCLOAK_ADMIN=admin
           KEYCLOAK_ADMIN_PASSWORD=${KC_PWD}
+          AUTH_SECRET=${AUTH_SEC}
           KEYCLOAK_DB=keycloak
           KEYCLOAK_REALM=secretshare
           KEYCLOAK_CLIENT_ID=secretshare-api
