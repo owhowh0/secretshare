@@ -4,7 +4,7 @@ A rejected token must not tell the client *why* it was rejected.
 Naming the reason — unknown signing key, wrong audience, expired — hands an
 attacker probing for a forgery a checklist of what to fix next. These tests pin
 the response to one constant body and assert the diagnostic detail reaches the
-server log instead (brief §2, CLAUDE.md §8 generic errors).
+server log instead (brief §2; SR-09, generic errors).
 """
 
 import logging

@@ -10,6 +10,7 @@
 #   - Tailscale (subdomain HTTPS ingress)
 #
 # Quick Start:
+#   sh scripts/init-env.sh        # once: creates .env with random secrets
 #   docker compose -f docker-compose.preview.yml up -d --build
 # ==============================================================================
 
@@ -38,7 +39,7 @@ services:
     environment:
       - NEXT_PUBLIC_BASE_PATH=
       - NEXT_PUBLIC_API_BASE=/api
-      - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET must be set in .env (run scripts/init-env.sh)}
       - AUTH_TRUST_HOST=true
       - AUTH_URL=https://${PR_HOSTNAME:-pr-${PR_NUMBER:-1}.staging-server}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
@@ -82,9 +83,9 @@ services:
       dockerfile: Dockerfile
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-secretshare}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secretshare}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=${POSTGRES_DB:-secretshare_pr_${PR_NUMBER:-1}}
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD:-secretshare}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare_pr_${PR_NUMBER:-1}}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-secretshare}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:5432/${POSTGRES_DB:-secretshare_pr_${PR_NUMBER:-1}}
       - REDIS_URL=${REDIS_URL:-rediss://${REDIS_HOST:-redis}:6379/0}
       - TLS_CA_CERT=/certs/ca.crt
       - PR_NUMBER=${PR_NUMBER:-1}
@@ -138,7 +139,7 @@ services:
           -c ssl_ca_file=/certs/ca.crt
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-secretshare}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretshare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (run scripts/init-env.sh)}
       POSTGRES_DB: ${POSTGRES_DB:-secretshare_pr_${PR_NUMBER:-1}}
       KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER:-1}}
     deploy:
@@ -199,10 +200,10 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-secretshare}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretshare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-secretshare_pr_${PR_NUMBER:-1}}
       KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER:-1}}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-secretshare}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
       PGSSLMODE: require
     depends_on:
       db:
@@ -228,7 +229,7 @@ services:
     command: start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set in .env (run scripts/init-env.sh)}
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
@@ -240,7 +241,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://${DB_HOST:-db}:5432/${KEYCLOAK_DB:-keycloak_pr_${PR_NUMBER:-1}}?ssl=true&sslmode=require
       KC_DB_USERNAME: ${POSTGRES_USER:-secretshare}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-secretshare}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:

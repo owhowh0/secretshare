@@ -36,6 +36,31 @@ class BurnResult:
     payload: str | None = None
 
 
+def create_redis_client(
+    url: str,
+    *,
+    tls_ca_cert: str = "",
+    connect_timeout: float | None = None,
+    socket_timeout: float | None = None,
+) -> Redis:
+    """
+    Builds the shared Redis client. With timeouts set, a Redis that hangs makes
+    a command fail with a RedisError after socket_timeout seconds, which the
+    service layer turns into a 503, instead of holding the request open.
+    """
+    kwargs: dict = {
+        "decode_responses": True,
+        "socket_connect_timeout": connect_timeout,
+        "socket_timeout": socket_timeout,
+    }
+    if tls_ca_cert and url.startswith("rediss://"):
+        kwargs["ssl_ca_certs"] = tls_ca_cert
+        kwargs["ssl_cert_reqs"] = "required"
+        # Same as the Postgres engine: the CA is verified, the hostname is not.
+        kwargs["ssl_check_hostname"] = False
+    return Redis.from_url(url, **kwargs)
+
+
 class SecretStore:
     def __init__(self, redis: Redis):
         self._redis = redis
