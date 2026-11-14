@@ -1,0 +1,17 @@
+# Development overrides for docker-compose.yml.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# docker-compose.yml alone is the staging/production stack (ENVIRONMENT=production,
+# Keycloak in production mode). This file only relaxes those two switches for
+# local work; everything else, secrets included, still comes from .env.
+services:
+  api:
+    environment:
+      # Missing DATABASE_URL / KEYCLOAK_* degrade (audit off, 503 on auth)
+      # instead of stopping the API at startup.
+      - ENVIRONMENT=development
+
+  keycloak:
+    # Dev mode: no theme caching, relaxed hostname checks, faster restarts.
+    command: start-dev --import-realm
