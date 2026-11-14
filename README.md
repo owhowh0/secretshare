@@ -65,17 +65,20 @@ All incoming traffic enters via **Traefik**, which routes requests cleanly by pa
 
 ## Quick Start (One-Command Deployment)
 
-The `docker-compose.preview.yml` compose file is configured as a turnkey, self-contained example stack with out-of-the-box defaults. Anyone can clone the repository and launch an isolated example stack immediately without manual `.env` setup:
+The `docker-compose.preview.yml` compose file is a self-contained example stack. The compose files ship **no fallback secrets**, so the first step generates a `.env` with random ones:
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/owhowh0/secretshare.git
 cd secretshare
 
-# 2. Ensure shared network exists
+# 2. Create .env with random passwords and AUTH_SECRET (once; never overwrites)
+sh scripts/init-env.sh
+
+# 3. Ensure shared network exists
 docker network create traefik-net 2>/dev/null || true
 
-# 3. Deploy the example preview stack
+# 4. Deploy the example preview stack
 docker compose -f docker-compose.preview.yml up -d --build
 ```
 
@@ -86,13 +89,22 @@ Compose will automatically:
 - Import the Keycloak realm and test accounts.
 - Build and start the Next.js frontend and FastAPI backend.
 
-### Production / Staging Deployment
-For staging and standard deployments using `docker-compose.yml`, configure your environment via `.env`:
+### Production / Staging vs. Development
+
+`docker-compose.yml` is the **staging/production** stack: the API runs with `ENVIRONMENT=production` (it refuses to start if `DATABASE_URL` or a `KEYCLOAK_*` setting is missing) and Keycloak runs in production mode (`start`). `docker-compose.dev.yml` is a small override that switches both back to development (`ENVIRONMENT=development`, Keycloak `start-dev`).
+
 ```bash
-cp .env.example .env
-# Customize passwords and secret keys in .env
+sh scripts/init-env.sh                                # once; or copy .env.example and fill every placeholder
+docker network create traefik-net 2>/dev/null || true # required: the stack joins this external network
+
+# Staging / production
 docker compose up -d --build
+
+# Local development
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+Compose stops with an error such as `AUTH_SECRET must be set in .env` if a required secret is missing; there are no built-in default passwords.
 
 ---
 
@@ -110,12 +122,12 @@ The system includes pre-provisioned testing accounts imported automatically on s
 
 ### Keycloak Administrator Account
 - **Username**: `admin`
-- **Password**: `admin` (or configured via `KEYCLOAK_ADMIN_PASSWORD` in `.env`)
+- **Password**: the value of `KEYCLOAK_ADMIN_PASSWORD` in your `.env` (no default)
 - **Console URL**: `http://localhost/keycloak`
 
 ### Database (PostgreSQL)
 - **User**: `secretshare`
-- **Password**: `secretshare` (or configured via `POSTGRES_PASSWORD` in `.env`)
+- **Password**: the value of `POSTGRES_PASSWORD` in your `.env` (no default)
 - **Databases**:
   - Main App DB: `secretshare`
   - Keycloak DB: `keycloak`
@@ -127,23 +139,27 @@ The system includes pre-provisioned testing accounts imported automatically on s
 | Variable | Default | Scope | Description |
 | :--- | :--- | :--- | :--- |
 | `POSTGRES_USER` | `secretshare` | DB / App | PostgreSQL username |
-| `POSTGRES_PASSWORD` | `secretshare` | DB / App | PostgreSQL password |
+| `POSTGRES_PASSWORD` | **required** | DB / App | PostgreSQL password |
 | `POSTGRES_DB` | `secretshare` | App | Application database name |
 | `POSTGRES_PORT` | `5432` | DB | Host port binding for PostgreSQL |
 | `DB_HOST` | `db` | App / KC | Hostname of the PostgreSQL service |
 | `REDIS_HOST` | `redis` | App | Hostname of the Redis service |
 | `REDIS_PORT` | `6379` | App | Port of the Redis service |
-| `REDIS_URL` | `rediss://redis:6379/0` | App | Redis connection URI with TLS (`rediss://`) |
+| `REDIS_URL` | `rediss://redis:6379/0` | App | Redis connection URI. Compose Redis is TLS-only, so it must be `rediss://`; leave unset to use the default |
 | `TLS_CA_CERT` | `/certs/ca.crt` | App | Path to trusted CA certificate for internal TLS |
 | `KEYCLOAK_ADMIN` | `admin` | Keycloak | Keycloak administrator username |
-| `KEYCLOAK_ADMIN_PASSWORD`| `admin` | Keycloak | Keycloak administrator password |
+| `KEYCLOAK_ADMIN_PASSWORD`| **required** | Keycloak | Keycloak administrator password |
 | `KEYCLOAK_DB` | `keycloak` | Keycloak | Dedicated Keycloak database name |
 | `KEYCLOAK_REALM` | `secretshare` | Shared | Active Keycloak realm |
 | `KEYCLOAK_CLIENT_ID` | `secretshare-api` | Shared | Public OIDC client ID |
 | `KEYCLOAK_URL` | `http://keycloak:8080/keycloak` | App / Web | Keycloak OIDC issuer URL |
 | `KEYCLOAK_PATH` | `/keycloak` | Traefik | Ingress path prefix for Keycloak |
-| `AUTH_SECRET` | `default_dev_auth_secret_must_be_32_characters` | NextAuth | 32-character secret for NextAuth session encryption |
+| `AUTH_SECRET` | **required** | NextAuth | Secret (≥ 32 characters) for NextAuth session encryption, e.g. `openssl rand -hex 32` |
+| `ENVIRONMENT` | set by compose file | FastAPI | `production` in `docker-compose.yml`, `development` with `docker-compose.dev.yml`; production fails fast on missing settings |
 | `API_ROOT_PATH` | `/api` | FastAPI | Ingress path prefix for FastAPI |
+| `REDIS_CONNECT_TIMEOUT_SECONDS` / `REDIS_SOCKET_TIMEOUT_SECONDS` | `3` / `5` | FastAPI | Redis connect / per-command timeout; a hung Redis yields `503` instead of a hanging request |
+| `DB_CONNECT_TIMEOUT_SECONDS` / `DB_COMMAND_TIMEOUT_SECONDS` / `DB_POOL_TIMEOUT_SECONDS` | `5` / `10` / `10` | FastAPI | PostgreSQL connect / per-query / wait-for-pooled-connection timeouts |
+| `JWKS_TIMEOUT_SECONDS` | `5` | FastAPI | Timeout for fetching Keycloak's signing keys (`503` on expiry) |
 | `SECRET_TTL_SECONDS` | `600` | FastAPI | Default unread secret TTL (10 minutes) |
 | `SECRET_TTL_MIN_SECONDS` | `300` | FastAPI | Minimum secret TTL (5 minutes) |
 | `SECRET_TTL_MAX_SECONDS` | `86400` | FastAPI | Maximum secret TTL (24 hours) |
