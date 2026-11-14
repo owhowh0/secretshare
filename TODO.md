@@ -3,6 +3,8 @@
 Source: `AUDIT_REPORT.md` (2026-11-14). Only ⚠️/❌ items. Sorted by marks at stake: CI/CD & tests first.
 Effort: **S** ≈ 1–2 h · **M** ≈ half a day · **L** ≈ 1+ day. (Points for balancing: S = 1, M = 2, L = 3.)
 
+**Progress:** 4 / 20 tasks done (6 / 29 points) — T8, T9, T10, T11 (Member 4 area), modified by Ecaterina on 2026-11-14, branch `chore/config-env-resilience`.
+
 ---
 
 ## P1 — CI/CD & Testing (10 marks)
@@ -26,6 +28,7 @@ Results only exist in Actions logs today; no JUnit, no coverage, no artifacts.
 `ruff check` reports 15 × F401 that CI never sees.
 - **Files:** `.github/workflows/test-api.yml` (lint step), `api/requirements-dev.txt` (`ruff`), the affected `api/app`/`api/tests` files (remove unused imports)
 - **Accept:** `ruff check app tests` exits 0 locally and runs as a CI step that fails the job on errors.
+- **Status:** ⏳ Open. Side note: the unused `import ssl` in `api/app/main.py` was already removed during T11 (**modified by Ecaterina**); all files touched in T8–T11 pass `ruff check`.
 
 ### T5 · Enforce green CI before merge — S
 PR #22 and #23 were merged with failing tests; 8 direct pushes to `main` (`a27bfae` broke CI).
@@ -46,25 +49,43 @@ CLAUDE.md invariant 8 promises Gitleaks; CI has none. No SCA either.
 
 ## P2 — Project readiness, config & environment
 
-### T8 · Make the README production path work out of the box — S
+### T8 · Make the README production path work out of the box — S · ✅ DONE
 Verified bug: `cp .env.example .env` → API healthy but every secret call returns 503 (`.env.example:24` uses `redis://` against TLS-only Redis). README prod path also omits `docker network create traefik-net`.
 - **Files:** `.env.example`, `README.md` (§ Production / Staging)
 - **Accept:** `REDIS_URL` in `.env.example` is `rediss://redis:6379/0` or removed; README prod steps include the network command; following the README verbatim on a clean clone gives a working create → reveal round-trip (record the commands + output).
+- **Status:** ✅ Done — **modified by Ecaterina**.
+  - Modified: `.env.example` (`REDIS_URL` commented out, defaults to `rediss://`; comment on TLS-only Redis), `README.md` (Production / Staging vs. Development section with `init-env.sh` + `traefik-net` steps; `REDIS_URL` row).
+  - Verified: `.env` generated from `.env.example` → `docker compose up --build --wait` healthy in 44 s, API got `REDIS_URL=rediss://redis:6379/0`, `test_secret_lifecycle.sh` (create → exists → reveal → burn) exit 0.
 
-### T9 · Remove insecure fallback secrets from compose — S
+### T9 · Remove insecure fallback secrets from compose — S · ✅ DONE
 `AUTH_SECRET:-default_dev_auth_secret…` (`docker-compose.yml:42`, `docker-compose.preview.yml:41`), `POSTGRES_PASSWORD:-secretshare`, `KEYCLOAK_ADMIN_PASSWORD:-admin` (preview).
 - **Files:** `docker-compose.yml`, `docker-compose.preview.yml`, `.env.example` (add `AUTH_SECRET=` placeholder + generation hint), `README.md` (credential section)
 - **Accept:** secrets use `${VAR:?VAR must be set}`; `docker compose config` fails with a clear message when one is missing; preview workflow still green (it already generates them); README no longer claims `admin`/`secretshare` defaults.
+- **Status:** ✅ Done — **modified by Ecaterina**.
+  - Modified: `docker-compose.yml`, `docker-compose.preview.yml` (`${VAR:?…}` for `AUTH_SECRET`, `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`; all `:-secretshare` / `:-admin` fallbacks removed), `.env.example` (`AUTH_SECRET` placeholder, header pointing to the script), `README.md` (Quick Start step, credentials and env table say **required**), `.github/workflows/test-api.yml` (OAuth job now writes a random `AUTH_SECRET`).
+  - Added: `scripts/init-env.sh` — creates `.env` from `.env.example` with distinct random values, mode 600, never prints them, refuses to overwrite.
+  - Verified: empty env → `docker compose config` exit 1 with `… must be set in .env (run scripts/init-env.sh)` for both compose files; generated env → config OK.
+  - Still open: PR preview pipeline not re-run (needs the Tailscale server). Staging server's `.env` must contain `AUTH_SECRET` before the next staging deploy.
 
-### T10 · Real dev/prod separation — M
+### T10 · Real dev/prod separation — M · ✅ DONE
 `ENVIRONMENT` is never set in compose, so the production fail-fast guard (`config.py:112`) never runs; Keycloak runs `start-dev` on staging; realm `sslRequired: none`.
 - **Files:** `docker-compose.yml` (prod-like: `ENVIRONMENT=production`, Keycloak `start` + proxy/hostname settings), new `docker-compose.dev.yml` or `compose.override.yml` (dev conveniences), `.env.example`, `README.md`
 - **Accept:** staging/prod stack runs with `ENVIRONMENT=production` and Keycloak in production mode; dev stack is one documented command; a test or CI step proves the API refuses to start in production with a missing setting.
+- **Status:** ✅ Done — **modified by Ecaterina**.
+  - Modified: `docker-compose.yml` (api `ENVIRONMENT=production`; Keycloak `start --import-realm` + `KC_PROXY_HEADERS=xforwarded`), `.env.example` (explains `ENVIRONMENT` is set per compose file), `README.md` (prod vs. dev commands, `ENVIRONMENT` row).
+  - Added: `docker-compose.dev.yml` (override: `ENVIRONMENT=development`, Keycloak `start-dev`). Dev command: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.
+  - Verified: prod stack — all 4 CI smoke scripts, 5 live OAuth tests, 10 web CSP tests pass; browser login (auth code + PKCE via NextAuth) simulated with curl → session `testuser`; blank `KEYCLOAK_REALM` → API exits 1 with `missing required settings for production: keycloak_realm`; with the dev override it starts. Unit test: `api/tests/test_config.py::test_production_requires_datastores_and_oidc`.
+  - Left for Member 3 (T13): realm `sslRequired: none`. `docker-compose.preview.yml` still uses `start-dev` (untested pipeline, left unchanged).
 
-### T11 · Explicit timeouts and resource limits — M
+### T11 · Explicit timeouts and resource limits — M · ✅ DONE
 No explicit timeouts on Redis, Postgres, JWKS fetch or browser `fetch`; no limits on `api`.
 - **Files:** `api/app/main.py` (Redis `socket_timeout`, `socket_connect_timeout`), `api/app/db/session.py` (`pool_timeout`, asyncpg `command_timeout`), `api/app/core/auth.py` (`PyJWKClient(timeout=…)`), `api/app/core/config.py` (settings for them), `web/app/page.tsx` (`AbortSignal.timeout`), `docker-compose.yml` (`deploy.resources.limits` for `api`)
 - **Accept:** values configurable via settings; unit test shows a hung Redis call ends in 503 within the configured time; web shows a timeout error instead of hanging.
+- **Status:** ✅ Done — **modified by Ecaterina**.
+  - Modified: `api/app/core/config.py` (6 settings: `REDIS_CONNECT_TIMEOUT_SECONDS`=3, `REDIS_SOCKET_TIMEOUT_SECONDS`=5, `DB_CONNECT_TIMEOUT_SECONDS`=5, `DB_COMMAND_TIMEOUT_SECONDS`=10, `DB_POOL_TIMEOUT_SECONDS`=10, `JWKS_TIMEOUT_SECONDS`=5), `api/app/storage/redis_store.py` (new `create_redis_client()`), `api/app/main.py` (uses it + passes DB timeouts), `api/app/db/session.py` (asyncpg `timeout`/`command_timeout`, `pool_timeout`), `api/app/core/auth.py` (`PyJWKClient(timeout=…)`), `web/app/page.tsx` (`apiFetch()` with 60 s `AbortSignal.timeout` on all 5 API calls, friendly timeout message), `docker-compose.yml` (api limit 1 CPU / 512 MB), `api/tests/test_config.py` (new env names in the clean-env list), `.env.example` + `README.md` (documented).
+  - Added: `api/tests/test_timeouts.py` (11 tests, incl. hung Redis → `503` + `Retry-After` in < 3 s).
+  - Verified: full API suite 187 passed / 5 skipped, security 61/61, TLS 18/18; negative control — same hung socket without timeout still blocked after 5 s; api container limits confirmed with `docker inspect`; web image builds (`next build` type-check).
+  - Why 60 s in the browser: the slowest reveal path (rate limit + JWKS + burn + audit write) can reach ≈ 40 s with the API defaults; aborting a reveal the server already completed would burn the secret.
 
 ---
 
