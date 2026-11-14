@@ -93,6 +93,11 @@ services:
       # network; its X-Forwarded-For carries the real client for rate limits
       # and audit. Only private ranges: a public peer is never believed.
       - TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     depends_on:
       db:
         condition: service_healthy
