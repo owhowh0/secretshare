@@ -28,7 +28,11 @@ def get_jwks_client(settings: Settings = Depends(get_settings)) -> PyJWKClient:
     )
     client = _jwks_clients.get(url)
     if client is None:
-        client = PyJWKClient(url, cache_jwk_set=True, lifespan=3600)
+        # PyJWT's default is 30 s; a hung Keycloak would hold every
+        # authenticated request that long before the 503.
+        client = PyJWKClient(
+            url, cache_jwk_set=True, lifespan=3600, timeout=settings.jwks_timeout_seconds
+        )
         _jwks_clients[url] = client
     return client
 

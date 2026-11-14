@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     # connections. Leave empty to connect without certificate verification.
     tls_ca_cert: str = ""
 
+    # Timeouts, in seconds. Without them a datastore or Keycloak that accepts
+    # the connection but never answers holds the request open until the OS
+    # gives up on the socket, which can take minutes.
+    redis_connect_timeout_seconds: float = Field(default=3.0, gt=0)
+    redis_socket_timeout_seconds: float = Field(default=5.0, gt=0)
+    db_connect_timeout_seconds: float = Field(default=5.0, gt=0)
+    db_command_timeout_seconds: float = Field(default=10.0, gt=0)
+    db_pool_timeout_seconds: float = Field(default=10.0, gt=0)
+    jwks_timeout_seconds: float = Field(default=5.0, gt=0)
+
     # Audit
     audit_enabled: bool = True
 
