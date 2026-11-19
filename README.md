@@ -38,7 +38,7 @@ All incoming traffic enters via **Traefik**, which routes requests cleanly by pa
 | **API & Swagger Docs** | `http://localhost/api/docs` | `https://pr-<N>.<domain>/api/docs` | FastAPI backend with OpenAPI 3.0 documentation |
 | **API Healthcheck** | `http://localhost/api/health` | `https://pr-<N>.<domain>/api/health` | Service health status check |
 | **Keycloak Realm** | `http://localhost/keycloak` | `https://pr-<N>.<domain>/keycloak` | Identity & Access Management (OIDC / OAuth2) |
-| **Traefik Dashboard** | `http://localhost:8080/` | *Internal only* | Ingress and router observability |
+| **Traefik Dashboard** | `http://127.0.0.1:8080/` | *Disabled* | Ingress and router observability (localhost only) |
 
 ### Internal Datastore Topology
 ```
@@ -75,10 +75,7 @@ cd secretshare
 # 2. Create .env with random passwords and AUTH_SECRET (once; never overwrites)
 sh scripts/init-env.sh
 
-# 3. Ensure shared network exists
-docker network create traefik-net 2>/dev/null || true
-
-# 4. Deploy the example preview stack
+# 3. Deploy the example preview stack
 docker compose -f docker-compose.preview.yml up -d --build
 ```
 
@@ -95,7 +92,6 @@ Compose will automatically:
 
 ```bash
 sh scripts/init-env.sh                                # once; or copy .env.example and fill every placeholder
-docker network create traefik-net 2>/dev/null || true # required: the stack joins this external network
 
 # Staging / production
 docker compose up -d --build
