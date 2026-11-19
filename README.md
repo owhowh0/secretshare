@@ -75,7 +75,10 @@ cd secretshare
 # 2. Create .env with random passwords and AUTH_SECRET (once; never overwrites)
 sh scripts/init-env.sh
 
-# 3. Deploy the example preview stack
+# 3. Ensure shared network exists
+docker network create traefik-net 2>/dev/null || true
+
+# 4. Deploy the example preview stack
 docker compose -f docker-compose.preview.yml up -d --build
 ```
 
@@ -92,6 +95,7 @@ Compose will automatically:
 
 ```bash
 sh scripts/init-env.sh                                # once; or copy .env.example and fill every placeholder
+docker network create traefik-net 2>/dev/null || true # required: the stack joins this external network
 
 # Staging / production
 docker compose up -d --build

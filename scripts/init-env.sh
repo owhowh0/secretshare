@@ -42,4 +42,10 @@ done < .env.example > "$tmp"
 
 mv "$tmp" .env
 trap - EXIT
+
+# Ensure external network required by compose exists
+if command -v docker >/dev/null 2>&1; then
+  docker network create traefik-net 2>/dev/null || true
+fi
+
 echo "Created .env with random secrets (mode 600)."
