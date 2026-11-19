@@ -83,7 +83,7 @@ services:
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8080${KEYCLOAK_PATH:-/keycloak}}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
-      - KEYCLOAK_ISSUER=http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/${KEYCLOAK_REALM:-secretshare}
+      - KEYCLOAK_ISSUER=${KEYCLOAK_ISSUER:-http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/${KEYCLOAK_REALM:-secretshare}}
       - API_ROOT_PATH=/api
       # Traefik (and any proxy in front of it) sits on a private Docker
       # network; its X-Forwarded-For carries the real client for rate limits

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse, urlunparse
 
 import jwt
 from jwt import PyJWKClient, PyJWTError
@@ -19,6 +20,25 @@ _bearer = HTTPBearer()
 _INVALID_TOKEN_DETAIL = "Invalid or expired token"
 
 _jwks_clients: dict[str, PyJWKClient] = {}
+
+
+def _allowed_issuers(configured_issuer: str) -> list[str]:
+    """Return configured issuer along with standard default-port equivalents (e.g. :80 or :443)."""
+    iss = configured_issuer.rstrip("/")
+    issuers = {iss}
+    parsed = urlparse(iss)
+    if parsed.scheme == "http" and parsed.port == 80:
+        netloc = parsed.hostname or ""
+        issuers.add(urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)).rstrip("/"))
+    elif parsed.scheme == "https" and parsed.port == 443:
+        netloc = parsed.hostname or ""
+        issuers.add(urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)).rstrip("/"))
+    elif parsed.port is None and parsed.hostname:
+        default_port = 80 if parsed.scheme == "http" else (443 if parsed.scheme == "https" else None)
+        if default_port:
+            netloc = f"{parsed.hostname}:{default_port}"
+            issuers.add(urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment)).rstrip("/"))
+    return list(issuers)
 
 
 def get_jwks_client(settings: Settings = Depends(get_settings)) -> PyJWKClient:
@@ -59,7 +79,7 @@ async def get_current_user(
             "audience": settings.keycloak_client_id,
         }
         if settings.keycloak_issuer:
-            decode_kwargs["issuer"] = settings.keycloak_issuer
+            decode_kwargs["issuer"] = _allowed_issuers(settings.keycloak_issuer)
         claims = jwt.decode(token, signing_key.key, **decode_kwargs)
         return claims
     except (PyJWKClientConnectionError, ConnectionError) as exc:
