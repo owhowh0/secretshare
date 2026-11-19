@@ -53,6 +53,7 @@ async def register_public_key(
 )
 async def get_user_public_keys(
     user_id: str,
+    claims: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserPublicKeysResponse:
     service = KeyService(db)
@@ -60,7 +61,7 @@ async def get_user_public_keys(
     if not keys:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No active device keys found for recipient '{user_id}'.",
+            detail="No active device keys found for this recipient.",
         )
 
     return UserPublicKeysResponse(

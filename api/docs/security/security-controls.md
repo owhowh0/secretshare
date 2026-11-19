@@ -252,3 +252,24 @@ Requirement, threat and risk identifiers refer to `security-requirements.md`,
 | **Implementation** | All SQL is issued through SQLAlchemy 2.0 constructs (`select`, `update`, ORM inserts) in `app/services/keys.py` and `app/core/audit.py`; values are sent as bound parameters by the asyncpg driver. Migrations contain static DDL only. Redis keys are formed as `s:<payload_id>` and passed as command arguments; the burn script receives the key in `KEYS` and the identity in `ARGV`. |
 | **How tested** | Indirectly: `tests/test_keys.py::test_register_and_retrieve_keys_flow` and `tests/security/test_audit_db.py` exercise the queries. **No test submits injection payloads.** |
 | **Limitations** | Protection rests on the absence of raw SQL, which is enforced by review rather than by a linter or test. A future `text()` query with string formatting would not be detected automatically. |
+
+
+## AUTH-4 · Keys endpoint authentication and authorization model
+
+| Aspect | Value |
+|---|---|
+| **Control** | `GET /keys/{user_id}` requires a valid Bearer token |
+| **Requirement** | SR-03 (authentication), SR-09 (no user enumeration) |
+
+### Decision: resource-based authorization, no RBAC
+
+The endpoint returns device public keys that any authenticated sender needs to
+encrypt a secret for a recipient. Restricting it by role would prevent senders
+from looking up recipients, breaking the core workflow. The secret itself is
+already bound to the recipient at creation time and burned atomically with a
+recipient check (SEC-1), so reading a public key grants no access to any secret.
+
+An unauthenticated caller could previously enumerate registered user IDs. Adding
+the Bearer token requirement closes that gap: the error response is generic
+("No active device keys found for this recipient.") regardless of whether the
+user exists, so a valid token still cannot distinguish "no user" from "no keys."

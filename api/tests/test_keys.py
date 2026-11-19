@@ -55,15 +55,25 @@ class FakeDbSession:
 
     async def execute(self, statement):
         mock_result = MagicMock()
+        params = getattr(statement.compile(), "params", {})
+        user_param = params.get("platform_user_id_1") or params.get("param_1")
+
         # Mocking User lookup
         if "FROM users" in str(statement):
-            found = next(iter(self.users.values()), None)
+            found = self.users.get(user_param) if user_param else next(iter(self.users.values()), None)
             mock_result.scalar_one_or_none.return_value = found
             return mock_result
 
         # Mocking DeviceKey lookup
         if "FROM device_keys" in str(statement):
-            active_keys = [k for k in self.device_keys if k.revoked_at is None]
+            matching_users = [
+                u.id for u in self.users.values()
+                if user_param is None or u.platform_user_id == user_param or str(u.id) == str(user_param)
+            ]
+            active_keys = [
+                k for k in self.device_keys
+                if k.revoked_at is None and k.user_id in matching_users
+            ]
             scalars_mock = MagicMock()
             scalars_mock.all.return_value = active_keys
             mock_result.scalars.return_value = scalars_mock
@@ -84,6 +94,10 @@ class TestKeyEndpoints:
             "/keys/register",
             json={"public_key": VALID_SPKI_PEM, "platform": "web"},
         )
+        assert response.status_code == 403
+
+    async def test_get_keys_without_token_fails_403(self, client):
+        response = await client.get("/keys/someuser")
         assert response.status_code == 403
 
     async def test_register_invalid_pem_fails_422(self, client, private_key_pem):
@@ -130,11 +144,16 @@ class TestKeyEndpoints:
             assert data["label"] == "Alice Laptop"
 
             # 2. Retrieve Alice's public key
-            get_res = await client.get("/keys/alice")
+            get_res = await client.get("/keys/alice", headers=headers)
             assert get_res.status_code == 200
             get_data = get_res.json()
             assert get_data["user_id"] == "alice"
             assert len(get_data["keys"]) == 1
             assert get_data["keys"][0]["label"] == "Alice Laptop"
+
+            # 3. Retrieve non-existent user keys returns generic 404
+            missing_res = await client.get("/keys/bob", headers=headers)
+            assert missing_res.status_code == 404
+            assert missing_res.json()["detail"] == "No active device keys found for this recipient."
         finally:
             app.dependency_overrides.pop(get_db, None)
