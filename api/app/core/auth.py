@@ -54,12 +54,13 @@ async def get_current_user(
     token = credentials.credentials
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token)
-        claims = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=settings.keycloak_client_id,
-        )
+        decode_kwargs: dict = {
+            "algorithms": ["RS256"],
+            "audience": settings.keycloak_client_id,
+        }
+        if settings.keycloak_issuer:
+            decode_kwargs["issuer"] = settings.keycloak_issuer
+        claims = jwt.decode(token, signing_key.key, **decode_kwargs)
         return claims
     except (PyJWKClientConnectionError, ConnectionError) as exc:
         raise HTTPException(

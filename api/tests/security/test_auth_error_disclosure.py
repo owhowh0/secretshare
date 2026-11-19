@@ -38,6 +38,7 @@ def _token_variants(private_key_pem: bytes) -> dict[str, str]:
     return {
         "expired": make_token(private_key_pem, exp_delta=-60),
         "wrong_audience": make_token(private_key_pem, audience="some-other-service"),
+        "wrong_issuer": make_token(private_key_pem, iss="http://evil.example.com/realms/fake"),
         "unknown_kid": make_token(private_key_pem, kid="unknown-kid-xyz"),
         "malformed": "not.a.jwt",
         "empty_segments": "..",

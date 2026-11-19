@@ -101,6 +101,7 @@ def _override_settings() -> Settings:
         keycloak_url=TEST_KEYCLOAK_URL,
         keycloak_realm=TEST_REALM,
         keycloak_client_id=TEST_CLIENT_ID,
+        keycloak_issuer=f"{TEST_KEYCLOAK_URL}/realms/{TEST_REALM}",
     )
 
 

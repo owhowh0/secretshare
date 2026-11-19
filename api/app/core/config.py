@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     keycloak_url: str = ""  # e.g. http://keycloak:8080
     keycloak_realm: str = ""  # e.g. secretshare
     keycloak_client_id: str = ""  # e.g. secretshare-api
+    keycloak_issuer: str = ""  # public issuer URL for JWT iss verification
 
     # Datastores
     database_url: str = ""  # postgresql+asyncpg://... ; empty disables audit logging
@@ -127,7 +128,7 @@ class Settings(BaseSettings):
             return self
         missing = [
             name
-            for name in ("database_url", "keycloak_url", "keycloak_realm", "keycloak_client_id")
+            for name in ("database_url", "keycloak_url", "keycloak_realm", "keycloak_client_id", "keycloak_issuer")
             if not getattr(self, name)
         ]
         if missing:

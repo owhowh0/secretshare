@@ -26,6 +26,7 @@ _SETTINGS_ENV = [
     "KEYCLOAK_URL",
     "KEYCLOAK_REALM",
     "KEYCLOAK_CLIENT_ID",
+    "KEYCLOAK_ISSUER",
     "DATABASE_URL",
     "REDIS_URL",
     "AUDIT_ENABLED",
@@ -177,7 +178,7 @@ class TestProductionFailFast:
             _settings(environment="production")
 
         message = str(exc_info.value)
-        for name in ("database_url", "keycloak_url", "keycloak_realm", "keycloak_client_id"):
+        for name in ("database_url", "keycloak_url", "keycloak_realm", "keycloak_client_id", "keycloak_issuer"):
             assert name in message
 
     def test_complete_production_config_is_accepted(self, clean_env):
@@ -187,6 +188,7 @@ class TestProductionFailFast:
             keycloak_url="http://keycloak:8080",
             keycloak_realm="secretshare",
             keycloak_client_id="secretshare-api",
+            keycloak_issuer="http://keycloak:8080/realms/secretshare",
         )
 
         assert settings.environment == "production"

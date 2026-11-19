@@ -11,6 +11,7 @@ services:
       # Missing DATABASE_URL / KEYCLOAK_* degrade (audit off, 503 on auth)
       # instead of stopping the API at startup.
       - ENVIRONMENT=development
+      - KEYCLOAK_ISSUER=http://localhost:${TRAEFIK_WEB_PORT:-80}/keycloak/realms/${KEYCLOAK_REALM:-secretshare}
 
   keycloak:
     # Dev mode: no theme caching, relaxed hostname checks, faster restarts.
