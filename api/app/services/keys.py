@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from app.db.models import DeviceKey, User
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger("secretshare.keys")
@@ -33,7 +34,16 @@ class KeyService:
                 workspace_id=workspace_id,
             )
             self._db.add(user)
-            await self._db.flush()
+            try:
+                await self._db.flush()
+            except IntegrityError:
+                # Two first-time requests for the same user raced: both saw no
+                # row and both inserted, so uq_users_platform_user rejected the
+                # second. The row now exists; use it instead of failing with a
+                # 500 (ZAP alert 90022, see api/docs/security/zap-scan-report.md).
+                await self._db.rollback()
+                result = await self._db.execute(query)
+                return result.scalar_one()
             logger.info("Created new user %s on platform %s", user.id, platform)
 
         return user

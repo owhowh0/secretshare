@@ -138,3 +138,44 @@ class TestKeyEndpoints:
             assert get_data["keys"][0]["label"] == "Alice Laptop"
         finally:
             app.dependency_overrides.pop(get_db, None)
+
+
+class TestUserCreationRace:
+    async def test_concurrent_first_registration_reuses_existing_user(self):
+        """ZAP finding: two parallel first registrations returned a 500.
+
+        The losing insert hits uq_users_platform_user; the service must roll
+        back and return the row the winner created.
+        """
+        from app.services.keys import KeyService
+        from sqlalchemy.exc import IntegrityError
+
+        existing = User(platform="web", platform_user_id="alice")
+
+        class RacingDb:
+            def __init__(self):
+                self.selects = 0
+                self.rolled_back = False
+
+            def add(self, obj):
+                pass
+
+            async def flush(self):
+                raise IntegrityError("INSERT", {}, Exception("duplicate key"))
+
+            async def rollback(self):
+                self.rolled_back = True
+
+            async def execute(self, statement):
+                self.selects += 1
+                result = MagicMock()
+                # first SELECT: row not there yet; second: the winner's row
+                result.scalar_one_or_none.return_value = None
+                result.scalar_one.return_value = existing
+                return result
+
+        db = RacingDb()
+        user = await KeyService(db).get_or_create_user("alice", platform="web")
+        assert user is existing
+        assert db.rolled_back
+        assert db.selects == 2
