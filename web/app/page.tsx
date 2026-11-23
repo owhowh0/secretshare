@@ -111,9 +111,19 @@ export default function Page() {
     return headers
   }, [session])
 
-  // Auto-onboard device on login, scoped by username
+  // Auto-onboard device on login, scoped by username.
+  // `session` changes identity on every NextAuth refetch, so this effect can
+  // fire again while the first registration is still in flight. Two parallel
+  // POST /keys/register calls raced on user creation and one failed with a 500
+  // (found by the ZAP scan); the ref lets only one onboarding run per user.
+  const onboardingFor = useRef<string | null>(null)
   useEffect(() => {
-    if (status !== 'authenticated' || !session || !username) return
+    if (status !== 'authenticated' || !session || !username) {
+      if (status === 'unauthenticated') onboardingFor.current = null
+      return
+    }
+    if (onboardingFor.current === username) return
+    onboardingFor.current = username
 
     async function onboardDevice() {
       try {
@@ -141,6 +151,7 @@ export default function Page() {
         await updateStoredDeviceId(username!, data.device_id)
         setDeviceRegistered(true)
       } catch (err) {
+        onboardingFor.current = null // allow a retry on the next session update
         setOnboardingError(err instanceof Error ? err.message : 'Key registration failed')
       }
     }
