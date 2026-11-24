@@ -53,14 +53,21 @@ async def register_public_key(
 )
 async def get_user_public_keys(
     user_id: str,
+    _claims: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> UserPublicKeysResponse:
+    """Return a recipient's active public keys to an authenticated sender.
+
+    Authentication is required: without it anyone on the network could probe
+    usernames (200 vs 404) and harvest device ids and labels — a direct object
+    reference with no access check (ZAP scan, api/docs/security/zap-scan-report.md).
+    """
     service = KeyService(db)
     keys = await service.get_active_keys_for_user(user_id)
     if not keys:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No active device keys found for recipient '{user_id}'.",
+            detail="Recipient has no active device keys.",
         )
 
     return UserPublicKeysResponse(

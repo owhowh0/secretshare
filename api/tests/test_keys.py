@@ -130,12 +130,35 @@ class TestKeyEndpoints:
             assert data["label"] == "Alice Laptop"
 
             # 2. Retrieve Alice's public key
-            get_res = await client.get("/keys/alice")
+            get_res = await client.get("/keys/alice", headers=headers)
             assert get_res.status_code == 200
             get_data = get_res.json()
             assert get_data["user_id"] == "alice"
             assert len(get_data["keys"]) == 1
             assert get_data["keys"][0]["label"] == "Alice Laptop"
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+
+class TestKeyAccessControl:
+    async def test_get_keys_without_token_fails_403(self, client):
+        """ZAP finding: GET /keys/{user_id} let anyone probe usernames."""
+        response = await client.get("/keys/alice")
+        assert response.status_code == 403
+
+    async def test_unknown_recipient_404_does_not_echo_input(self, client, private_key_pem):
+        from app.main import app
+
+        fake_db = FakeDbSession()
+        app.dependency_overrides[get_db] = lambda: fake_db
+        try:
+            token = make_token(private_key_pem)
+            response = await client.get(
+                "/keys/<script>x</script>",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert response.status_code == 404
+            assert "<script>" not in response.text
         finally:
             app.dependency_overrides.pop(get_db, None)
 
