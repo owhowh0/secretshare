@@ -31,6 +31,9 @@ DOCS_CSP = (
     "frame-ancestors 'none'"
 )
 
+# Swagger UI and its OAuth2 redirect page; both are disabled in production.
+DOCS_PATHS = frozenset({"/docs", "/docs/", "/docs/oauth2-redirect", "/redoc"})
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
@@ -43,11 +46,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
-        is_docs = (
-            request.url.path in ("/docs", "/redoc", "/openapi.json")
-            or "/docs" in request.url.path
-            or "/redoc" in request.url.path
-        )
+        # Exact paths only: a substring test ("/docs" in path) handed the
+        # weaker Swagger CSP to any route that merely contains "/docs".
+        path = request.url.path
+        root_path = request.scope.get("root_path", "")
+        if root_path and path.startswith(root_path):
+            path = path[len(root_path):]
+        is_docs = path in DOCS_PATHS
 
         for header, value in BASE_SECURITY_HEADERS.items():
             if header == "Content-Security-Policy" and is_docs:

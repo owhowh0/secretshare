@@ -138,6 +138,11 @@ class TestSecurityHeaders:
         assert r.status_code == 200
         assert r.headers.get("content-security-policy") == "default-src 'none'; frame-ancestors 'none'"
 
+    async def test_docs_csp_not_applied_to_other_paths(self, client):
+        """Only the Swagger page gets the relaxed CSP, not any path containing /docs."""
+        r = await client.get("/secrets/docs")
+        assert r.headers.get("content-security-policy") == "default-src 'none'; frame-ancestors 'none'"
+
     async def test_docs_route_allows_swagger_ui_assets(self, client):
         r = await client.get("/docs")
         assert r.status_code == 200
