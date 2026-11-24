@@ -68,11 +68,19 @@ async def lifespan(app: FastAPI):
         app.state.db_session_factory = None
 
 
+# Swagger UI loads its scripts from a CDN without Subresource Integrity and
+# needs 'unsafe-inline' (ZAP alerts 10055, 90003, 10017). It is a development
+# aid, so production serves neither the UI nor the schema.
+_docs_enabled = settings.environment != "production"
+
 app = FastAPI(
     title="SecretShare API",
     version="0.1.0",
     root_path=settings.root_path,
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 # CORS
