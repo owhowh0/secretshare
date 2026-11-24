@@ -20,6 +20,9 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Drops "X-Powered-By: Next.js" (ZAP alert 10037): it tells an attacker
+  // which framework CVEs to try and serves no client.
+  poweredByHeader: false,
   basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? '',
   trailingSlash: true,
   output: 'standalone',
