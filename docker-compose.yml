@@ -39,7 +39,7 @@ services:
     environment:
       - NEXT_PUBLIC_BASE_PATH=
       - NEXT_PUBLIC_API_BASE=/api
-      - AUTH_SECRET=${AUTH_SECRET:-default_dev_auth_secret_must_be_32_characters}
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET must be set in .env (run scripts/init-env.sh)}
       - AUTH_TRUST_HOST=true
       - AUTH_URL=http://localhost:${TRAEFIK_WEB_PORT:-80}/api/auth
       - AUTH_KEYCLOAK_ID=secretshare-api
@@ -85,10 +85,19 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-secretshare}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-secretshare-api}
       - API_ROOT_PATH=/api
+      # This file is the staging/production stack: the API refuses to start
+      # if DATABASE_URL or a KEYCLOAK_* setting is missing. docker-compose.dev.yml
+      # switches it back to development.
+      - ENVIRONMENT=production
       # Traefik (and any proxy in front of it) sits on a private Docker
       # network; its X-Forwarded-For carries the real client for rate limits
       # and audit. Only private ranges: a public peer is never believed.
       - TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     depends_on:
       db:
         condition: service_healthy
@@ -126,7 +135,7 @@ services:
           -c ssl_ca_file=/certs/ca.crt
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-secretshare}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (run scripts/init-env.sh)}
       POSTGRES_DB: ${POSTGRES_DB:-secretshare}
       KEYCLOAK_DB: ${KEYCLOAK_DB:-keycloak}
     ports:
@@ -207,11 +216,17 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
-    command: start-dev --import-realm
+    # Production mode (no dev shortcuts such as disabled theme caching). HTTP
+    # stays enabled because Keycloak sits behind Traefik: TLS, where present,
+    # terminates in front of it, and this local stack has none (Traefik :80).
+    # X-Forwarded-* from Traefik carry the public scheme and host.
+    # docker-compose.dev.yml switches back to start-dev.
+    command: start --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD must be set in .env (run scripts/init-env.sh)}
       KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: ${KEYCLOAK_PATH:-/keycloak}

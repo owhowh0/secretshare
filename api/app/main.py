@@ -1,5 +1,4 @@
 import logging
-import ssl
 from contextlib import asynccontextmanager
 
 from app.api.errors import register_exception_handlers
@@ -12,9 +11,9 @@ from app.core.limits import BODY_OVERHEAD_BYTES, BodySizeLimitMiddleware
 from app.core.proxy import TrustedProxyMiddleware
 from app.core.logging_filters import install_secret_path_redaction
 from app.db.session import create_engine, create_session_factory, dispose_engine
+from app.storage.redis_store import create_redis_client
 from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from redis.asyncio import Redis
 from starlette.responses import JSONResponse
 
 logger = logging.getLogger("secretshare.api")
@@ -33,16 +32,22 @@ async def lifespan(app: FastAPI):
 
     settings = get_settings()
 
-    redis_kwargs: dict = {"decode_responses": True}
-    if settings.tls_ca_cert and settings.redis_url.startswith("rediss://"):
-        redis_kwargs["ssl_ca_certs"] = settings.tls_ca_cert
-        redis_kwargs["ssl_cert_reqs"] = "required"
-        redis_kwargs["ssl_check_hostname"] = False
-    redis = Redis.from_url(settings.redis_url, **redis_kwargs)
+    redis = create_redis_client(
+        settings.redis_url,
+        tls_ca_cert=settings.tls_ca_cert,
+        connect_timeout=settings.redis_connect_timeout_seconds,
+        socket_timeout=settings.redis_socket_timeout_seconds,
+    )
     app.state.redis = redis
 
     engine = (
-        create_engine(settings.database_url, tls_ca_cert=settings.tls_ca_cert)
+        create_engine(
+            settings.database_url,
+            tls_ca_cert=settings.tls_ca_cert,
+            connect_timeout=settings.db_connect_timeout_seconds,
+            command_timeout=settings.db_command_timeout_seconds,
+            pool_timeout=settings.db_pool_timeout_seconds,
+        )
         if settings.database_url
         else None
     )

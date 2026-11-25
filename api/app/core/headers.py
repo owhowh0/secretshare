@@ -2,9 +2,10 @@
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# Applied to all responses. HSTS is deliberately absent: it is set by Caddy at
-# the TLS edge (CLAUDE.md §5), and sending it over plain HTTP in development
-# would poison the browser's HSTS cache for localhost.
+# Applied to all responses. HSTS is deliberately absent: it belongs to the TLS
+# edge (Tailscale Serve in previews; R-12 in api/docs/security/risk-register.md),
+# and sending it over plain HTTP in development would poison the browser's HSTS
+# cache for localhost.
 BASE_SECURITY_HEADERS = {
     # A secret is revealed exactly once; a cached copy would outlive the burn.
     "Cache-Control": "no-store, no-cache, must-revalidate, private",
@@ -33,7 +34,7 @@ DOCS_CSP = (
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
-    Adds the security headers required by CLAUDE.md §11.6.
+    Adds the security headers required by SR-28 (control API-5).
 
     Set on every response, not just the secret endpoints, so a new route cannot
     forget them. Existing values are not overwritten, letting a route opt out

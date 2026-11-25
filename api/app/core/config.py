@@ -41,6 +41,16 @@ class Settings(BaseSettings):
     # connections. Leave empty to connect without certificate verification.
     tls_ca_cert: str = ""
 
+    # Timeouts, in seconds. Without them a datastore or Keycloak that accepts
+    # the connection but never answers holds the request open until the OS
+    # gives up on the socket, which can take minutes.
+    redis_connect_timeout_seconds: float = Field(default=3.0, gt=0)
+    redis_socket_timeout_seconds: float = Field(default=5.0, gt=0)
+    db_connect_timeout_seconds: float = Field(default=5.0, gt=0)
+    db_command_timeout_seconds: float = Field(default=10.0, gt=0)
+    db_pool_timeout_seconds: float = Field(default=10.0, gt=0)
+    jwks_timeout_seconds: float = Field(default=5.0, gt=0)
+
     # Audit
     audit_enabled: bool = True
 
@@ -50,7 +60,7 @@ class Settings(BaseSettings):
     secret_ttl_min_seconds: int = Field(default=300, gt=0)  # 5 minutes
     secret_ttl_max_seconds: int = Field(default=86400, gt=0)  # 24 hours
 
-    # Payload limits. 64 KB per CLAUDE.md §7; the relay stays blind to the
+    # Payload limits. 64 KB per NFR-07 (SR-07); the relay stays blind to the
     # envelope's contents, so total size is the only thing it may judge.
     max_payload_bytes: int = Field(default=65536, gt=0)
 

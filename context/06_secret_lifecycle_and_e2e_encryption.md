@@ -82,11 +82,12 @@ The caller identity is `claims["preferred_username"]`, falling back to `claims["
 
 ## 4. Security Invariants
 
-The code cites numbered invariants from `CLAUDE.md`. That file is **gitignored**, so this is the list reconstructed from how the code uses each number. Treat `CLAUDE.md`, where available, as canonical.
+The code cites these invariants by number. The numbering comes from the team's initial design specification, which is not part of the repository; this table is the reference. The security requirements they belong to are listed in `api/docs/security/security-requirements.md`.
 
 | # | Invariant | Enforced by |
 | :---: | :--- | :--- |
 | 1 | The server is blind to envelope contents; it judges only total size. | `schemas/secrets.py`, `core/limits.py` (`BodySizeLimitMiddleware`) |
+| 2 | Device private keys never leave the browser and are stored as non-exportable keys. | **Not met:** `generateRsaKeyPair` in `web/lib/crypto.ts` creates extractable keys (R-02). The keys are not transmitted. |
 | 3 | Single delivery: two concurrent readers never both receive a secret. | Lua burn in `storage/redis_store.py` |
 | 4 | Payload ids come from `secrets.token_urlsafe(32)` (≥ 43 characters, 256 bits). | `core/ids.py` |
 | 5 | Unknown, burned and expired ids are indistinguishable (same status, body and headers). | one 404 handler; no expired error; audit failures swallowed |

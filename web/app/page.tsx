@@ -17,6 +17,25 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '/api'
 
+// Upper bound for every API call, so a hung backend shows an error instead of
+// an endless spinner. It must stay above the API's slowest reveal path: with
+// the default timeouts in api/app/core/config.py, rate limit + JWKS + burn +
+// audit write can take about 40 s in the worst case. Giving up on a reveal the
+// server has already completed would burn the secret with nobody left to
+// decrypt it.
+const API_TIMEOUT_MS = 60_000
+
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, { ...init, signal: AbortSignal.timeout(API_TIMEOUT_MS) })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'TimeoutError') {
+      throw new Error('The server did not respond in time. Please try again.')
+    }
+    throw e
+  }
+}
+
 const TTL_OPTIONS = [
   { seconds: 300, label: '5 minutes' },
   { seconds: 600, label: '10 minutes' },
@@ -104,7 +123,7 @@ export default function Page() {
           return
         }
 
-        const res = await fetch(`${API_BASE}/keys/register`, {
+        const res = await apiFetch(`${API_BASE}/keys/register`, {
           method: 'POST',
           headers: getHeaders(),
           body: JSON.stringify({
@@ -142,7 +161,7 @@ export default function Page() {
 
     try {
       // Id in the body, not the URL, so it stays out of access logs (AUD-6).
-      const res = await fetch(`${API_BASE}/secrets/exists`, {
+      const res = await apiFetch(`${API_BASE}/secrets/exists`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ payload_id: idToUse }),
@@ -206,7 +225,7 @@ export default function Page() {
 
     try {
       // 1. Fetch recipient's active public keys
-      const keysRes = await fetch(`${API_BASE}/keys/${encodeURIComponent(recipientId.trim())}`, {
+      const keysRes = await apiFetch(`${API_BASE}/keys/${encodeURIComponent(recipientId.trim())}`, {
         headers: getHeaders(),
       })
       if (keysRes.status === 404) {
@@ -237,7 +256,7 @@ export default function Page() {
       )
 
       // 4. Post envelope to backend
-      const res = await fetch(`${API_BASE}/secrets`, {
+      const res = await apiFetch(`${API_BASE}/secrets`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({
@@ -288,7 +307,7 @@ export default function Page() {
       }
 
       // Atomically burn from server
-      const res = await fetch(`${API_BASE}/secrets/reveal`, {
+      const res = await apiFetch(`${API_BASE}/secrets/reveal`, {
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({ payload_id: payloadId.trim() }),
