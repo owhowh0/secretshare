@@ -222,13 +222,34 @@ python -m pytest -v -m integration tests/test_oauth_integration.py
 GitHub Actions workflows are defined in [`.github/workflows/`](.github/workflows/):
 
 1. **API & Security Tests** ([`test-api.yml`](.github/workflows/test-api.yml)):
-   - Runs on pull requests and pushes to development branches.
-   - Executes unit tests, migration checks, and full OAuth integration tests against Dockerized dependencies.
+   - Runs on pull requests and pushes to development branches (`main`, `develop`, `feat/**`).
+   - Executes `ruff check` linting, database migrations, unit & security tests, and live OAuth integration tests.
+   - Publishes JUnit XML test reports, Cobertura coverage XML artifacts, and step summaries to `$GITHUB_STEP_SUMMARY`.
 2. **TLS Verification** ([`test-tls.yml`](.github/workflows/test-tls.yml)):
-   - Verifies certificate generation script, permissions, and TLS settings.
-3. **Ephemeral PR Previews** ([`deploy-preview.yml`](.github/workflows/deploy-preview.yml)):
+   - Verifies certificate generation script, permissions, SSL contexts, and TLS settings.
+   - Generates coverage reports and JUnit artifacts.
+3. **Security & Dependency Audit** ([`security.yml`](.github/workflows/security.yml)):
+   - Runs Gitleaks secret scanner on full Git history to prevent credential leaks.
+   - Performs Python SCA via `pip-audit` on `api/requirements.txt`.
+   - Performs frontend dependency auditing via `bun audit` on `web/bun.lock`.
+4. **Ephemeral PR Previews** ([`deploy-preview.yml`](.github/workflows/deploy-preview.yml)):
    - Automatically provisions an isolated preview stack per pull request on the staging server via Tailscale.
    - Provides full HTTPS on a dedicated subdomain (`https://pr-<N>.<domain>/`).
    - Runs automated end-to-end smoke tests (auth, secret lifecycle, routing).
-4. **Staging Deployment** ([`deploy-staging.yml`](.github/workflows/deploy-staging.yml)):
+5. **Staging Deployment** ([`deploy-staging.yml`](.github/workflows/deploy-staging.yml)):
    - **Manually executable via `workflow_dispatch` (only on `main`)**: Deploys the latest `main` branch to the permanent staging environment via Tailscale SSH on demand.
+   - Automatically initializes `.env` if missing via `scripts/init-env.sh`, protects against port collisions with preview Traefik, and verifies post-deployment health via `wait_services_ready.sh` and `test_web_routing.sh`.
+
+### Branch Protection & Merge Enforcement (`main`)
+
+To ensure stability and prevent broken builds or regression on `main`:
+- **No Direct Pushes**: Direct pushes to `main` are rejected. All changes must be proposed via pull requests.
+- **Required Status Checks**: Merging requires passing status checks:
+  - `Run API tests` (`test-api.yml`)
+  - `Run OAuth live integration tests` (`test-api.yml`)
+  - `Run TLS tests` (`test-tls.yml`)
+  - `Secret scanning (Gitleaks)` (`security.yml`)
+  - `Python dependency audit (pip-audit)` (`security.yml`)
+  - `Frontend dependency audit (bun audit)` (`security.yml`)
+- **Strict Linear History**: Branches must be up to date with `main` before merging.
+- **Audit Evidence**: Detailed policy settings and rejection evidence are documented in [branch-protection-rules.md](docs/security/evidence/branch-protection-rules.md).
