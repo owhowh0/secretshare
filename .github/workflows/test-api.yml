@@ -63,11 +63,20 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Lint with ruff
+        run: ruff check app tests
+
       - name: Run database migrations
         run: python -m alembic upgrade head
 
       - name: Run tests
-        run: python -m pytest -q --strict-markers --ignore=tests/test_tls.py
+        run: |
+          mkdir -p test-results
+          python -m pytest -q --strict-markers --ignore=tests/test_tls.py \
+            --junitxml=test-results/junit.xml \
+            --cov=app \
+            --cov-report=xml:test-results/coverage.xml \
+            --cov-report=term
 
       - name: Fail if any security test was skipped
         run: |
@@ -78,6 +87,18 @@ jobs:
             echo "They assert the invariants in context/06_secret_lifecycle_and_e2e_encryption.md §4 and must always run."
             exit 1
           fi
+
+      - name: Publish Test Report & Coverage Summary
+        if: always()
+        run: |
+          python ../.github/scripts/report_summary.py "API Unit & Security Tests" test-results/junit.xml test-results/coverage.xml >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: api/test-results/
 
   oauth-integration:
     name: Run OAuth live integration tests
@@ -139,7 +160,25 @@ jobs:
           REQUIRE_KEYCLOAK: "1"
         working-directory: api
         run: |
-          python -m pytest -v -m integration tests/test_oauth_integration.py
+          mkdir -p test-results
+          python -m pytest -v -m integration tests/test_oauth_integration.py \
+            --junitxml=test-results/oauth-junit.xml \
+            --cov=app \
+            --cov-report=xml:test-results/oauth-coverage.xml \
+            --cov-report=term
+
+      - name: Publish OAuth Test Summary
+        if: always()
+        working-directory: api
+        run: |
+          python ../.github/scripts/report_summary.py "OAuth Live Integration Tests" test-results/oauth-junit.xml test-results/oauth-coverage.xml >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload OAuth test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oauth-test-results
+          path: api/test-results/
 
       - name: Output container logs on failure
         if: failure()

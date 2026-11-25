@@ -32,4 +32,22 @@ jobs:
           python -m pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run tests
-        run: python -m pytest tests/test_tls.py -q --strict-markers
+        run: |
+          mkdir -p test-results
+          python -m pytest tests/test_tls.py -q --strict-markers \
+            --junitxml=test-results/tls-junit.xml \
+            --cov=app \
+            --cov-report=xml:test-results/tls-coverage.xml \
+            --cov-report=term
+
+      - name: Publish TLS Test Summary
+        if: always()
+        run: |
+          python ../.github/scripts/report_summary.py "TLS Tests" test-results/tls-junit.xml test-results/tls-coverage.xml >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Upload TLS test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tls-test-results
+          path: api/test-results/
