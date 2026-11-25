@@ -1,35 +1,46 @@
 # CI/CD & Deployment
 
-Four GitHub Actions workflows live in `.github/workflows/`. Tests and preview deploys run on every PR. Staging is manual.
+Five GitHub Actions workflows live in `.github/workflows/`. Tests, security audits, and preview deploys run on every PR. Staging is manual.
 
 | Workflow | Trigger | What it does |
 | :--- | :--- | :--- |
-| `test-api.yml` | PRs; pushes to `main`, `develop`, `feat/**` | Unit, security and integration tests |
-| `test-tls.yml` | same | `tests/test_tls.py` only |
+| `test-api.yml` | PRs; pushes to `main`, `develop`, `feat/**` | Ruff linting, unit/security tests, OAuth live tests, coverage & JUnit artifacts |
+| `test-tls.yml` | same | `tests/test_tls.py` only, coverage & JUnit artifacts |
+| `security.yml` | same | Gitleaks secret scan, `pip-audit` for API, `bun audit` for web |
 | `deploy-preview.yml` | PR opened / synchronize / reopened / closed | Per-PR preview on `staging-server` plus the smoke battery; teardown on close |
-| `deploy-staging.yml` | **`workflow_dispatch` only**, on `main` | Rebuilds `docker-compose.yml` as project `staging`. **Currently broken** (troubleshooting §13). |
+| `deploy-staging.yml` | **`workflow_dispatch` only**, on `main` | Rebuilds `docker-compose.yml` as project `staging` on staging host with smoke verification |
 
 ---
 
 ## 1. `test-api.yml`
 
 ### Job `test` (Run API tests)
-- Python 3.12, `pip install -r requirements.txt -r requirements-dev.txt` (pip, not uv).
+- Python 3.12, `pip install -r requirements.txt -r requirements-dev.txt` (including `ruff` and `pytest-cov`).
+- **Lint step:** `ruff check app tests` (fails on unused imports or style errors).
 - Service containers: `postgres:16` and `redis:7`, with `DATABASE_URL`, `TEST_DATABASE_URL` and `TEST_REDIS_URL` pointing at them.
-- `python -m alembic upgrade head`, then `python -m pytest -q --strict-markers --ignore=tests/test_tls.py`.
+- `python -m alembic upgrade head`.
+- Runs pytest with `--junitxml=test-results/junit.xml --cov=app --cov-report=xml:test-results/coverage.xml --cov-report=term`.
 - **Skip gate:** runs `pytest tests/security` again and fails if anything was skipped. The security suites skip themselves without Redis or Postgres, and the gate stops CI from going green without asserting the invariants.
+- **Reporting & Artifacts:** uploads JUnit XML and Cobertura coverage XML as actions artifacts and appends pass/fail/coverage summary table to `$GITHUB_STEP_SUMMARY`.
 
 ### Job `oauth-integration` (Run OAuth live integration tests)
 - Generates a throwaway `.env` and runs `docker compose up -d --wait db keycloak traefik web api` (the local `docker-compose.yml`).
 - Runs `test_web_routing.sh`, `test_api_docs.sh`, and a realm check against `http://localhost:80`.
-- Runs `pytest -m integration tests/test_oauth_integration.py`: a real Keycloak password grant for `testuser`, `/me`, tampered-token 401, and a full create → reveal → 404 lifecycle addressed to `testuser`.
+- Runs `pytest -m integration tests/test_oauth_integration.py` with JUnit and coverage collection.
+- Publishes OAuth test summary to `$GITHUB_STEP_SUMMARY` and uploads artifacts.
 
 ## 2. `test-tls.yml`
-Runs `python -m pytest tests/test_tls.py`: the `tls_ca_cert` setting, the SSL contexts for the engine and Redis, and the artefacts produced by `tls/generate.sh` (including `ca.srl`).
+Runs `python -m pytest tests/test_tls.py` with `--junitxml`, `--cov=app`, and uploads artifacts: the `tls_ca_cert` setting, the SSL contexts for the engine and Redis, and the artefacts produced by `tls/generate.sh` (including `ca.srl`).
+
+## 3. `security.yml`
+Runs on pushes and PRs:
+- **Gitleaks (`gitleaks/gitleaks-action@v2`):** full history scan (`fetch-depth: 0`) against `.gitleaks.toml`.
+- **pip-audit:** scans `api/requirements.txt` against PyPI/OSV vulnerability databases.
+- **bun audit:** scans frontend dependencies in `web/bun.lock`.
 
 ---
 
-## 3. `deploy-preview.yml`
+## 4. `deploy-preview.yml`
 
 Runs only for PRs from this repository whose author is `OWNER`, `MEMBER` or `COLLABORATOR`.
 
@@ -72,4 +83,21 @@ Rate limits are per client IP (10 creates per minute). All smoke requests come f
 ---
 
 ## 5. `deploy-staging.yml`
-Manual only, restricted to `main`. It syncs `/opt/secretshare` hard to `origin/main` (`fetch`, `checkout -B`, `reset --hard`, `clean -fd`) and runs `docker compose -p staging -f docker-compose.yml up -d --build`. It currently fails (missing `.env` and a Traefik port conflict; see troubleshooting §13).
+Manual only, restricted to `main`. It syncs `/opt/secretshare` hard to `origin/main` (`fetch`, `checkout -B`, `reset --hard`, `clean -fd`), initializes `.env` via `scripts/init-env.sh` if missing, starts the stack with `docker compose -p staging up -d --build`, and executes post-deployment smoke verification (`wait_services_ready.sh`, `curl /api/health`, and `test_web_routing.sh`). All heredoc commands redirect stdin (`</dev/null`) to avoid hung execution.
+
+---
+
+## 6. Branch Protection & Merge Policies
+
+Enforced on `main` to prevent broken builds and unreviewed changes:
+- Direct pushes to `main` are rejected.
+- All merges require a Pull Request with approved reviews.
+- Mandatory status checks before merge:
+  - `Run API tests`
+  - `Run OAuth live integration tests`
+  - `Run TLS tests`
+  - `Secret scanning (Gitleaks)`
+  - `Python dependency audit (pip-audit)`
+  - `Frontend dependency audit (bun audit)`
+- Strict linear history: branch must be up to date before merge.
+- Evidence and reproduction documented in `docs/security/evidence/branch-protection-rules.md`.
