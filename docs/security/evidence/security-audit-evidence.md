@@ -12,14 +12,15 @@
 ### Python API Dependencies (`pip-audit`)
 - Scans `api/requirements.txt` against PyPI Advisory Database and OSV.
 - Dependencies scanned:
-  - `fastapi[standard]==0.115.6`
+  - `fastapi[standard]>=0.115.6`
+  - `starlette>=1.3.1`
   - `redis==5.2.1`
   - `pydantic-settings==2.7.1`
   - `sqlalchemy[asyncio]==2.0.54`
   - `asyncpg==0.30.0`
   - `alembic==1.14.0`
   - `httpx==0.28.1`
-  - `pyjwt[crypto]==2.10.1`
+  - `pyjwt[crypto]>=2.15.0`
 - **Result**: 0 known vulnerabilities found.
 
 ### Frontend Web Dependencies (`bun audit`)
