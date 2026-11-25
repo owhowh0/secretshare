@@ -1,7 +1,6 @@
 import base64
 import time
 
-import httpx
 import pytest
 import pytest_asyncio
 from cryptography.hazmat.backends import default_backend

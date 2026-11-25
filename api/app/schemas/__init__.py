@@ -5,3 +5,14 @@ from .secrets import (
     SecretRetrieveResponse,
     SecretRevealRequest,
 )
+
+__all__ = [
+    "DeviceKeyItem",
+    "KeyRegisterRequest",
+    "UserPublicKeysResponse",
+    "SecretCreateRequest",
+    "SecretCreateResponse",
+    "SecretRetrieveResponse",
+    "SecretRevealRequest",
+]
+

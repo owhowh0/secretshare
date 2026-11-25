@@ -20,7 +20,6 @@ import pytest_asyncio
 from app.api.routes.secrets import (
     create_rate_limit,
     get_audit_service,
-    get_secret_service,
     retrieve_rate_limit,
 )
 from app.core.auth import get_current_user

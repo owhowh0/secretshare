@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-import pytest
 from app.api.routes.keys import get_db
 from app.db.models import DeviceKey, User
 

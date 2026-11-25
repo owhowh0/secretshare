@@ -4,7 +4,6 @@ The real SecretService runs over an in-memory store (tests/fakes.py), so the
 TTL defaulting, bound checks and exception mapping are the production code.
 """
 
-import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -26,10 +25,8 @@ from app.schemas.secrets import (
     EncryptedKeyItem,
 )
 from app.services.exceptions import (
-    InvalidSecretTTLError,
     SecretAccessDeniedError,
     SecretNotFoundError,
-    SecretStoreUnavailableError,
 )
 from fastapi.testclient import TestClient
 from redis.exceptions import ConnectionError as RedisConnectionError

@@ -1,4 +1,3 @@
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import make_token
