@@ -1,0 +1,13 @@
+# Gitleaks configuration for SecretShare
+[extend]
+
+[allowlist]
+description = "Ignore known test fixtures, synthetic test keys, and documentation"
+paths = [
+    '''api/tests/.*''',
+    '''keycloak/realm-export\.json''',
+    '''tls/.*''',
+    '''\.env\.example''',
+    '''docs/.*''',
+    '''context/.*''',
+]
