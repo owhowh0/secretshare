@@ -4,14 +4,34 @@ from urllib.parse import urlparse, urlunparse
 import jwt
 from jwt import PyJWKClient, PyJWTError
 from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError, PyJWKSetError
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Request, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .config import Settings, get_settings
 
 logger = logging.getLogger("secretshare.auth")
 
-_bearer = HTTPBearer()
+
+class _HTTPBearer403(HTTPBearer):
+    """
+    Subclass HTTPBearer to preserve the security invariant:
+    a missing Authorization header returns 403 Forbidden.
+    Upgraded FastAPI returns 401 Unauthorized by default when credentials are missing.
+    """
+
+    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials | None:
+        try:
+            return await super().__call__(request)
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=exc.detail,
+                )
+            raise
+
+
+_bearer = _HTTPBearer403()
 
 # Every rejected token gets this one message. Naming the reason — an unknown
 # signing key, a bad audience, an expired token — tells an attacker probing for
