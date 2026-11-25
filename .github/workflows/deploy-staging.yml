@@ -36,14 +36,37 @@ jobs:
             echo "=== Syncing repository to origin/main ==="
             cd "${REPO_DIR}"
             git remote set-url origin "https://github.com/${{ github.repository }}.git"
-            git fetch origin main
-            git checkout -B main origin/main
-            git reset --hard origin/main
-            git clean -fd
+            git fetch origin main </dev/null
+            git checkout -B main origin/main </dev/null
+            git reset --hard origin/main </dev/null
+            git clean -fd </dev/null
+
+            echo "=== Ensuring environment file exists ==="
+            if [ ! -f .env ]; then
+              echo "Initializing .env via scripts/init-env.sh..."
+              sh scripts/init-env.sh </dev/null
+            fi
+
+            STAGING_PORT=$(grep "^TRAEFIK_WEB_PORT=" .env 2>/dev/null | cut -d= -f2 || true)
+            STAGING_PORT="${STAGING_PORT:-80}"
 
             echo "=== Ensuring shared traefik network ==="
             docker network inspect traefik-net >/dev/null 2>&1 || docker network create traefik-net
 
             echo "=== Rebuilding and updating staging stack ==="
-            docker compose -p staging -f docker-compose.yml up -d --build --remove-orphans
+            docker compose -p staging -f docker-compose.yml up -d --build --remove-orphans </dev/null
+
+            echo "=== Running post-deploy smoke checks on http://localhost:${STAGING_PORT} ==="
+            bash .github/scripts/wait_services_ready.sh "http://localhost:${STAGING_PORT}" </dev/null
+            curl -f -s "http://localhost:${STAGING_PORT}/api/health" </dev/null
+            echo ""
+            bash .github/scripts/test_web_routing.sh "http://localhost:${STAGING_PORT}" false </dev/null
+
+            echo "=== Staging deployment and smoke checks passed successfully! ==="
           EOF
+
+      - name: Output failure guidance
+        if: failure()
+        run: |
+          echo "::error::Staging deployment or post-deploy smoke test failed."
+          echo "Verify Tailscale connectivity, server .env variables, and container logs on staging-server."
